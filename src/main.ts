@@ -6,8 +6,13 @@ import { AppModule } from './app.module';
 import express from 'express';
 
 const server = express();
+let appInstance = null;
 
 async function createApp() {
+  if (appInstance) {
+    return appInstance;
+  }
+
   const app = await NestFactory.create(
     AppModule,
     new ExpressAdapter(server),
@@ -32,6 +37,8 @@ async function createApp() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
+  await app.init();
+  appInstance = app;
   return app;
 }
 
@@ -45,7 +52,6 @@ if (require.main === module) {
 }
 
 export default async function handler(req, res) {
-  const app = await createApp();
-  await app.init();
+  await createApp();
   server(req, res);
 }
