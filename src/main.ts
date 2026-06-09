@@ -35,7 +35,13 @@ async function createApp() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.use('/api/docs', express.static(__dirname + '/swagger-ui'));
+  expressApp.get('/api/docs/swagger.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(document);
+  });
 
   await app.init();
   appInstance = app;
