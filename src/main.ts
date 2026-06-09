@@ -1,10 +1,23 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ExpressAdapter } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import express from 'express';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+const server = express();
+let appInstance = null;
+
+async function createApp() {
+  if (appInstance) {
+    return appInstance;
+  }
+
+  const app = await NestFactory.create(
+    AppModule,
+    new ExpressAdapter(server),
+    { logger: ['error', 'warn', 'log'] }
+  );
 
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
@@ -22,9 +35,29 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.use('/api/docs', express.static(__dirname + '/swagger-ui'));
+  expressApp.get('/api/docs/swagger.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(document);
+  });
 
+  await app.init();
+  appInstance = app;
+  return app;
+}
+
+async function bootstrap() {
+  const app = await createApp();
   await app.listen(process.env.PORT || 3000);
 }
 
-bootstrap();
+if (require.main === module) {
+  bootstrap();
+}
+
+export default async function handler(req, res) {
+  await createApp();
+  server(req, res);
+}

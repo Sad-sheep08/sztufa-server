@@ -6,8 +6,8 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
-    "build": "nest build",
-    "vercel-build": "npm run build && prisma generate",
+    "build": "npx nest build",
+    "vercel-build": "npx nest build && npx prisma generate && node copy-swagger.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -40,6 +40,7 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
+    "@nestjs/cli": "^10.2.0",
     "@nestjs/testing": "^10.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^4.17.25",
