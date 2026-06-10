@@ -7,11 +7,11 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('api/v1/players')
 @ApiTags('球员')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 export class PlayerController {
   constructor(private readonly playerService: PlayerService) {}
 
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Post()
   @ApiOperation({ summary: '创建球员' })
   create(@Body() createPlayerDto: CreatePlayerDto) {
@@ -40,12 +40,16 @@ export class PlayerController {
     return this.playerService.findOne(id);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   @ApiOperation({ summary: '更新球员信息' })
   update(@Param('id') id: string, @Body() updatePlayerDto: UpdatePlayerDto) {
     return this.playerService.update(id, updatePlayerDto);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   @ApiOperation({ summary: '删除球员' })
   remove(@Param('id') id: string) {

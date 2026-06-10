@@ -7,11 +7,11 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('api/v1/matches')
 @ApiTags('比赛')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 export class MatchController {
   constructor(private readonly matchService: MatchService) {}
 
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Post()
   @ApiOperation({ summary: '创建比赛' })
   create(@Body() createMatchDto: CreateMatchDto) {
@@ -34,12 +34,16 @@ export class MatchController {
     return this.matchService.findOne(id);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   @ApiOperation({ summary: '更新比赛信息' })
   update(@Param('id') id: string, @Body() updateMatchDto: UpdateMatchDto) {
     return this.matchService.update(id, updateMatchDto);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   @ApiOperation({ summary: '删除比赛' })
   remove(@Param('id') id: string) {
