@@ -27,7 +27,9 @@ export class MatchService {
   }
 
   async findAll(page: number = 1, limit: number = 10, teamId?: string) {
-    const skip = (page - 1) * limit;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Math.min(100, Number(limit) || 10));
+    const skip = (pageNum - 1) * limitNum;
     const where = teamId
       ? {
           OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
@@ -37,7 +39,7 @@ export class MatchService {
     const [data, total] = await Promise.all([
       this.prisma.match.findMany({
         skip,
-        take: limit,
+        take: limitNum,
         where,
         include: { homeTeam: true, awayTeam: true },
         orderBy: { matchDate: 'desc' },
@@ -45,7 +47,7 @@ export class MatchService {
       this.prisma.match.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return { data, total, page: pageNum, limit: limitNum };
   }
 
   async findOne(id: string) {

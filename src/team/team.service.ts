@@ -15,17 +15,19 @@ export class TeamService {
   }
 
   async findAll(page: number = 1, limit: number = 10) {
-    const skip = (page - 1) * limit;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Math.min(100, Number(limit) || 10));
+    const skip = (pageNum - 1) * limitNum;
     const [data, total] = await Promise.all([
       this.prisma.team.findMany({
         skip,
-        take: limit,
+        take: limitNum,
         include: { players: true },
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.team.count(),
     ]);
-    return { data, total, page, limit };
+    return { data, total, page: pageNum, limit: limitNum };
   }
 
   async findOne(id: string) {
