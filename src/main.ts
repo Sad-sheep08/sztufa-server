@@ -25,7 +25,17 @@ async function createApp() {
     forbidNonWhitelisted: true,
   }));
 
-  app.enableCors();
+  app.enableCors({
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:8080',
+      'https://yourdomain.com',
+      'https://api.yourdomain.com',
+      'https://your-vercel-project.vercel.app'
+    ].filter(Boolean), // 过滤掉空值
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  });
 
   const config = new DocumentBuilder()
     .setTitle('校园足球信息管理平台 API')
