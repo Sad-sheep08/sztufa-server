@@ -31,8 +31,8 @@ async function createApp() {
       'http://localhost:8080',
       'https://yourdomain.com',
       'https://api.yourdomain.com',
-      'https://your-vercel-project.vercel.app'
-    ].filter(Boolean), // 过滤掉空值
+      'https://your-project.vercel.app'
+    ].filter(Boolean),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
   });
