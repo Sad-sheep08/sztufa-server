@@ -31,6 +31,7 @@ async function createApp() {
       'http://localhost:8080',
       'https://sztufa.xyz',
       'https://api.sztufa.xyz',
+      'https://admin.sztufa.xyz',
       'https://sztufa-server.vercel.app'
     ].filter(Boolean),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
