@@ -26,19 +26,6 @@ export class MatchService {
       include: { homeTeam: true, awayTeam: true },
     });
 
-    if (goals && goals.length > 0) {
-      await this.prisma.goal.createMany({
-        data: goals.map((g) => ({
-          matchId: match.id,
-          playerName: g.playerName,
-          jerseyNumber: g.jerseyNumber,
-          goalTime: g.goalTime,
-          teamType: g.teamType,
-          playerId: g.playerId || null,
-        })),
-      });
-    }
-
     if (events && events.length > 0) {
       await this.prisma.matchEvent.createMany({
         data: events.map((e) => ({
@@ -47,6 +34,35 @@ export class MatchService {
           eventType: e.eventType,
           description: e.description,
           teamType: e.teamType,
+          playerId: e.playerId || null,
+          playerName: e.playerName || null,
+          jerseyNumber: e.jerseyNumber || null,
+        })),
+      });
+    }
+
+    // 自动同步进球记录到 Goal 表以向下兼容展示端
+    const goalEvents = events ? events.filter(e => e.eventType === 'goal') : [];
+    if (goalEvents.length > 0) {
+      await this.prisma.goal.createMany({
+        data: goalEvents.map((g) => ({
+          matchId: match.id,
+          playerName: g.playerName || '',
+          jerseyNumber: g.jerseyNumber || '',
+          goalTime: g.eventTime,
+          teamType: g.teamType,
+          playerId: g.playerId || null,
+        })),
+      });
+    } else if (goals && goals.length > 0) {
+      await this.prisma.goal.createMany({
+        data: goals.map((g) => ({
+          matchId: match.id,
+          playerName: g.playerName,
+          jerseyNumber: g.jerseyNumber,
+          goalTime: g.goalTime,
+          teamType: g.teamType,
+          playerId: g.playerId || null,
         })),
       });
     }
@@ -123,21 +139,6 @@ export class MatchService {
       data: matchData,
     });
 
-    // 同步进球数据
-    await this.prisma.goal.deleteMany({ where: { matchId: id } });
-    if (goals && goals.length > 0) {
-      await this.prisma.goal.createMany({
-        data: goals.map((g) => ({
-          matchId: id,
-          playerName: g.playerName,
-          jerseyNumber: g.jerseyNumber,
-          goalTime: g.goalTime,
-          teamType: g.teamType,
-          playerId: g.playerId || null,
-        })),
-      });
-    }
-
     // 同步比赛事件数据
     await this.prisma.matchEvent.deleteMany({ where: { matchId: id } });
     if (events && events.length > 0) {
@@ -148,6 +149,36 @@ export class MatchService {
           eventType: e.eventType,
           description: e.description,
           teamType: e.teamType,
+          playerId: e.playerId || null,
+          playerName: e.playerName || null,
+          jerseyNumber: e.jerseyNumber || null,
+        })),
+      });
+    }
+
+    // 同步进球数据到 Goal 表（向下兼容展示端）
+    await this.prisma.goal.deleteMany({ where: { matchId: id } });
+    const goalEvents = events ? events.filter(e => e.eventType === 'goal') : [];
+    if (goalEvents.length > 0) {
+      await this.prisma.goal.createMany({
+        data: goalEvents.map((g) => ({
+          matchId: id,
+          playerName: g.playerName || '',
+          jerseyNumber: g.jerseyNumber || '',
+          goalTime: g.eventTime,
+          teamType: g.teamType,
+          playerId: g.playerId || null,
+        })),
+      });
+    } else if (goals && goals.length > 0) {
+      await this.prisma.goal.createMany({
+        data: goals.map((g) => ({
+          matchId: id,
+          playerName: g.playerName,
+          jerseyNumber: g.jerseyNumber,
+          goalTime: g.goalTime,
+          teamType: g.teamType,
+          playerId: g.playerId || null,
         })),
       });
     }
