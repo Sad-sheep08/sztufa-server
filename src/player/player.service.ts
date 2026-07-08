@@ -2,12 +2,16 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlayerDto } from './dto/create-player.dto';
 import { UpdatePlayerDto } from './dto/update-player.dto';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Injectable()
 export class PlayerService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
-  async create(createPlayerDto: CreatePlayerDto) {
+  async create(createPlayerDto: CreatePlayerDto, username: string) {
     const team = await this.prisma.team.findUnique({
       where: { id: createPlayerDto.teamId },
     });
@@ -22,7 +26,7 @@ export class PlayerService {
 
     if (existingPlayer) {
       // 如果已存在，则更新球员信息
-      return this.prisma.player.update({
+      const updatedPlayer = await this.prisma.player.update({
         where: { studentId: createPlayerDto.studentId },
         data: {
           name: createPlayerDto.name,
@@ -32,12 +36,28 @@ export class PlayerService {
         },
         include: { team: true },
       });
+
+      await this.auditLogService.log(
+        username,
+        'UPDATE_PLAYER',
+        `因导入/创建查重，覆盖更新了球员信息: ${createPlayerDto.name} (学号: ${createPlayerDto.studentId})`
+      );
+
+      return updatedPlayer;
     }
 
-    return this.prisma.player.create({
+    const newPlayer = await this.prisma.player.create({
       data: createPlayerDto,
       include: { team: true },
     });
+
+    await this.auditLogService.log(
+      username,
+      'CREATE_PLAYER',
+      `创建了新球员: ${createPlayerDto.name} (学号: ${createPlayerDto.studentId})`
+    );
+
+    return newPlayer;
   }
 
   async findAll(teamId?: string, page: number = 1, limit: number = 10) {
@@ -71,7 +91,7 @@ export class PlayerService {
     return player;
   }
 
-  async update(id: string, updatePlayerDto: UpdatePlayerDto) {
+  async update(id: string, updatePlayerDto: UpdatePlayerDto, username: string) {
     const player = await this.prisma.player.findUnique({ where: { id } });
     if (!player) {
       throw new NotFoundException('球员不存在');
@@ -86,19 +106,35 @@ export class PlayerService {
       }
     }
 
-    return this.prisma.player.update({
+    const updatedPlayer = await this.prisma.player.update({
       where: { id },
       data: updatePlayerDto,
       include: { team: true },
     });
+
+    await this.auditLogService.log(
+      username,
+      'UPDATE_PLAYER',
+      `更新了球员信息: ${player.name} (学号: ${player.studentId})`
+    );
+
+    return updatedPlayer;
   }
 
-  async remove(id: string) {
+  async remove(id: string, username: string) {
     const player = await this.prisma.player.findUnique({ where: { id } });
     if (!player) {
       throw new NotFoundException('球员不存在');
     }
-    return this.prisma.player.delete({ where: { id } });
+    const result = await this.prisma.player.delete({ where: { id } });
+
+    await this.auditLogService.log(
+      username,
+      'DELETE_PLAYER',
+      `删除了球员: ${player.name} (学号: ${player.studentId})`
+    );
+
+    return result;
   }
 
   async searchByName(name: string) {

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, DefaultValuePipe, ParseIntPipe, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { MatchService } from './match.service';
 import { CreateMatchDto } from './dto/create-match.dto';
@@ -14,8 +14,9 @@ export class MatchController {
   @UseGuards(JwtAuthGuard)
   @Post()
   @ApiOperation({ summary: '创建比赛' })
-  create(@Body() createMatchDto: CreateMatchDto) {
-    return this.matchService.create(createMatchDto);
+  create(@Body() createMatchDto: CreateMatchDto, @Req() req: any) {
+    const username = req.user?.username || 'admin';
+    return this.matchService.create(createMatchDto, username);
   }
 
   @Get()
@@ -38,15 +39,17 @@ export class MatchController {
   @UseGuards(JwtAuthGuard)
   @Patch(':id')
   @ApiOperation({ summary: '更新比赛信息' })
-  update(@Param('id') id: string, @Body() updateMatchDto: UpdateMatchDto) {
-    return this.matchService.update(id, updateMatchDto);
+  update(@Param('id') id: string, @Body() updateMatchDto: UpdateMatchDto, @Req() req: any) {
+    const username = req.user?.username || 'admin';
+    return this.matchService.update(id, updateMatchDto, username);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
   @ApiOperation({ summary: '删除比赛' })
-  remove(@Param('id') id: string) {
-    return this.matchService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    const username = req.user?.username || 'admin';
+    return this.matchService.remove(id, username);
   }
 }

@@ -2,12 +2,16 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Injectable()
 export class MatchService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
-  async create(createMatchDto: CreateMatchDto) {
+  async create(createMatchDto: CreateMatchDto, username: string) {
     const [homeTeam, awayTeam] = await Promise.all([
       this.prisma.team.findUnique({ where: { id: createMatchDto.homeTeamId } }),
       this.prisma.team.findUnique({ where: { id: createMatchDto.awayTeamId } }),
@@ -70,6 +74,22 @@ export class MatchService {
       });
     }
 
+    // 同步本场比赛受影响球员的红黄牌与停赛状态
+    if (events && events.length > 0) {
+      const affectedPlayerIds = new Set<string>();
+      events.forEach(e => { if (e.playerId) affectedPlayerIds.add(e.playerId); });
+      for (const playerId of affectedPlayerIds) {
+        await this.syncPlayerCards(playerId, this.prisma);
+      }
+    }
+
+    // 记录审计日志
+    await this.auditLogService.log(
+      username,
+      'CREATE_MATCH',
+      `录入了比赛比分与事件: ${homeTeam.teamName} vs ${awayTeam.teamName} (比分: ${createMatchDto.homeScore}:${createMatchDto.awayScore})`
+    );
+
     return this.prisma.match.findUnique({
       where: { id: match.id },
       include: { homeTeam: true, awayTeam: true, goals: true, events: true },
@@ -111,8 +131,11 @@ export class MatchService {
     return match;
   }
 
-  async update(id: string, updateMatchDto: UpdateMatchDto) {
-    const match = await this.prisma.match.findUnique({ where: { id } });
+  async update(id: string, updateMatchDto: UpdateMatchDto, username: string) {
+    const match = await this.prisma.match.findUnique({
+      where: { id },
+      include: { homeTeam: true, awayTeam: true, events: true },
+    });
     if (!match) {
       throw new NotFoundException('比赛不存在');
     }
@@ -135,7 +158,15 @@ export class MatchService {
       }
     }
 
+    // 收集所有本场比赛可能受影响的球员（旧事件球员 + 新事件球员）
+    const affectedPlayerIds = new Set<string>();
+    match.events.forEach(e => { if (e.playerId) affectedPlayerIds.add(e.playerId); });
+
     const { goals, events, ...matchData } = updateMatchDto;
+
+    if (events) {
+      events.forEach(e => { if (e.playerId) affectedPlayerIds.add(e.playerId); });
+    }
 
     await this.prisma.match.update({
       where: { id },
@@ -189,17 +220,71 @@ export class MatchService {
       });
     }
 
+    // 重新计算并同步所有受影响球员的红黄牌与停赛状态
+    for (const playerId of affectedPlayerIds) {
+      await this.syncPlayerCards(playerId, this.prisma);
+    }
+
+    // 记录审计日志
+    const homeTeamName = match.homeTeam?.teamName || '';
+    const awayTeamName = match.awayTeam?.teamName || '';
+    await this.auditLogService.log(
+      username,
+      'UPDATE_MATCH',
+      `修改了比赛信息与比分: ${homeTeamName} vs ${awayTeamName} (比分由 ${match.homeScore}:${match.awayScore} 变更为 ${updateMatchDto.homeScore ?? match.homeScore}:${updateMatchDto.awayScore ?? match.awayScore})`
+    );
+
     return this.prisma.match.findUnique({
       where: { id },
       include: { homeTeam: true, awayTeam: true, goals: true, events: true },
     });
   }
 
-  async remove(id: string) {
-    const match = await this.prisma.match.findUnique({ where: { id } });
+  async remove(id: string, username: string) {
+    const match = await this.prisma.match.findUnique({
+      where: { id },
+      include: { homeTeam: true, awayTeam: true, events: true },
+    });
     if (!match) {
       throw new NotFoundException('比赛不存在');
     }
-    return this.prisma.match.delete({ where: { id } });
+
+    const affectedPlayerIds = new Set<string>();
+    match.events.forEach(e => { if (e.playerId) affectedPlayerIds.add(e.playerId); });
+
+    await this.prisma.match.delete({ where: { id } });
+
+    // 同步受影响球员的状态
+    for (const playerId of affectedPlayerIds) {
+      await this.syncPlayerCards(playerId, this.prisma);
+    }
+
+    await this.auditLogService.log(
+      username,
+      'DELETE_MATCH',
+      `删除了比赛: ${match.homeTeam.teamName} vs ${match.awayTeam.teamName} (比分: ${match.homeScore}:${match.awayScore})`
+    );
+
+    return match;
+  }
+
+  async syncPlayerCards(playerId: string, tx: any = this.prisma) {
+    const yellows = await tx.matchEvent.count({
+      where: { playerId, eventType: 'yellow_card' }
+    });
+    const reds = await tx.matchEvent.count({
+      where: { playerId, eventType: 'red_card' }
+    });
+
+    const shouldSuspend = reds > 0 || (yellows > 0 && yellows % 3 === 0);
+
+    await tx.player.update({
+      where: { id: playerId },
+      data: {
+        yellowCards: yellows,
+        redCards: reds,
+        status: shouldSuspend ? 'suspended' : 'active',
+      }
+    });
   }
 }

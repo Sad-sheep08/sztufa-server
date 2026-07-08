@@ -35,6 +35,9 @@ model Player {
   studentId     String  @unique
   jerseyNumber  String
   photo         String?
+  status        String  @default("active")
+  yellowCards   Int     @default(0)
+  redCards      Int     @default(0)
   teamId        String
   team          Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
   goals         Goal[]
@@ -134,4 +137,15 @@ model User {
   updatedAt DateTime @updatedAt
 
   @@index([username])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  username  String
+  action    String
+  details   String
+  createdAt DateTime @default(now())
+
+  @@index([username])
+  @@index([createdAt])
 }

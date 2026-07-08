@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, DefaultValuePipe, ParseIntPipe, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PlayerService } from './player.service';
 import { CreatePlayerDto } from './dto/create-player.dto';
@@ -14,8 +14,9 @@ export class PlayerController {
   @UseGuards(JwtAuthGuard)
   @Post()
   @ApiOperation({ summary: '创建球员' })
-  create(@Body() createPlayerDto: CreatePlayerDto) {
-    return this.playerService.create(createPlayerDto);
+  create(@Body() createPlayerDto: CreatePlayerDto, @Req() req: any) {
+    const username = req.user?.username || 'admin';
+    return this.playerService.create(createPlayerDto, username);
   }
 
   @Get()
@@ -44,15 +45,17 @@ export class PlayerController {
   @UseGuards(JwtAuthGuard)
   @Patch(':id')
   @ApiOperation({ summary: '更新球员信息' })
-  update(@Param('id') id: string, @Body() updatePlayerDto: UpdatePlayerDto) {
-    return this.playerService.update(id, updatePlayerDto);
+  update(@Param('id') id: string, @Body() updatePlayerDto: UpdatePlayerDto, @Req() req: any) {
+    const username = req.user?.username || 'admin';
+    return this.playerService.update(id, updatePlayerDto, username);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
   @ApiOperation({ summary: '删除球员' })
-  remove(@Param('id') id: string) {
-    return this.playerService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    const username = req.user?.username || 'admin';
+    return this.playerService.remove(id, username);
   }
 }
