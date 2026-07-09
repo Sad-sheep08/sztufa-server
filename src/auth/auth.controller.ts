@@ -54,4 +54,16 @@ export class AuthController {
   async deleteUser(@Param('id') id: string) {
     return this.authService.deleteUser(id);
   }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Patch('users/:id/reset-password')
+  @ApiOperation({ summary: '重置用户密码（仅超级管理员）' })
+  async resetPassword(
+    @Param('id') id: string,
+    @Body('password') password: string,
+  ) {
+    return this.authService.resetPassword(id, password);
+  }
 }

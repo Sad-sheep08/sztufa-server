@@ -98,4 +98,17 @@ export class AuthService {
       where: { id },
     });
   }
+
+  async resetPassword(id: string, newPassword: string) {
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    return this.prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+      },
+    });
+  }
 }
