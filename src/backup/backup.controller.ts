@@ -2,9 +2,13 @@ import { Controller, Get, Post, Body, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { BackupService } from './backup.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('api/v1/backups')
 @ApiTags('备份管理')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('super_admin')
 export class BackupController {
   constructor(private readonly backupService: BackupService) {}
 

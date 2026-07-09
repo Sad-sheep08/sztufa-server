@@ -13,7 +13,7 @@ export class AuthService {
   ) {}
 
   async register(createUserDto: CreateUserDto) {
-    const { username, password, role } = createUserDto;
+    const { username, password, role, teamId } = createUserDto;
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await this.prisma.user.create({
@@ -21,11 +21,13 @@ export class AuthService {
         username,
         password: hashedPassword,
         role: role || 'user',
+        teamId: teamId || null,
       },
       select: {
         id: true,
         username: true,
         role: true,
+        teamId: true,
         createdAt: true,
       },
     });
@@ -48,6 +50,7 @@ export class AuthService {
         id: user.id,
         username: user.username,
         role: user.role,
+        teamId: user.teamId,
       },
       token,
     };
@@ -56,7 +59,7 @@ export class AuthService {
   async validateUser(payload: any) {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, username: true, role: true },
+      select: { id: true, username: true, role: true, teamId: true },
     });
     return user;
   }

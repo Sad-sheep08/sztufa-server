@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlayerDto } from './dto/create-player.dto';
 import { UpdatePlayerDto } from './dto/update-player.dto';
@@ -11,7 +11,13 @@ export class PlayerService {
     private readonly auditLogService: AuditLogService,
   ) {}
 
-  async create(createPlayerDto: CreatePlayerDto, username: string) {
+  async create(createPlayerDto: CreatePlayerDto, username: string, userCtx?: any) {
+    if (userCtx && userCtx.role === 'coach') {
+      if (userCtx.teamId !== createPlayerDto.teamId) {
+        throw new ForbiddenException('您没有权限为其他球队创建或导入球员');
+      }
+    }
+
     const team = await this.prisma.team.findUnique({
       where: { id: createPlayerDto.teamId },
     });
@@ -91,10 +97,19 @@ export class PlayerService {
     return player;
   }
 
-  async update(id: string, updatePlayerDto: UpdatePlayerDto, username: string) {
+  async update(id: string, updatePlayerDto: UpdatePlayerDto, username: string, userCtx?: any) {
     const player = await this.prisma.player.findUnique({ where: { id } });
     if (!player) {
       throw new NotFoundException('球员不存在');
+    }
+
+    if (userCtx && userCtx.role === 'coach') {
+      if (player.teamId !== userCtx.teamId) {
+        throw new ForbiddenException('您没有权限修改其他球队的球员信息');
+      }
+      if (updatePlayerDto.teamId && updatePlayerDto.teamId !== userCtx.teamId) {
+        throw new ForbiddenException('您没有权限将球员划归到其他球队');
+      }
     }
 
     if (updatePlayerDto.teamId) {
@@ -121,11 +136,18 @@ export class PlayerService {
     return updatedPlayer;
   }
 
-  async remove(id: string, username: string) {
+  async remove(id: string, username: string, userCtx?: any) {
     const player = await this.prisma.player.findUnique({ where: { id } });
     if (!player) {
       throw new NotFoundException('球员不存在');
     }
+
+    if (userCtx && userCtx.role === 'coach') {
+      if (player.teamId !== userCtx.teamId) {
+        throw new ForbiddenException('您没有权限删除其他球队的球员');
+      }
+    }
+
     const result = await this.prisma.player.delete({ where: { id } });
 
     await this.auditLogService.log(

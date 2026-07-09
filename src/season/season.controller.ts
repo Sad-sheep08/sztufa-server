@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Body, UseGuards, Request } from '@nestjs/common';
 import { SeasonService } from './season.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('api/v1/seasons')
 export class SeasonController {
@@ -16,7 +18,8 @@ export class SeasonController {
     return this.seasonService.getActiveSeason();
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
   @Post('archive')
   async archiveSeason(
     @Body('name') name: string,

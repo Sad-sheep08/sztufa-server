@@ -23,6 +23,7 @@ model Team {
   players         Player[]
   homeMatches     Match[]   @relation("HomeTeam")
   awayMatches     Match[]   @relation("AwayTeam")
+  users           User[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -148,10 +149,13 @@ model User {
   username  String   @unique
   password  String
   role      String   @default("user")
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([username])
+  @@index([teamId])
 }
 
 model AuditLog {
