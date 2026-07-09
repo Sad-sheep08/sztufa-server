@@ -41,6 +41,12 @@ export class PlayerController {
     return this.playerService.findOne(id);
   }
 
+  @Get(':id/career')
+  @ApiOperation({ summary: '获取球员跨赛季生涯数据' })
+  getCareer(@Param('id') id: string) {
+    return this.playerService.getCareerStats(id);
+  }
+
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Patch(':id')

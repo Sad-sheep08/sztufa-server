@@ -143,4 +143,113 @@ export class PlayerService {
       include: { team: true },
     });
   }
+
+  async getCareerStats(id: string) {
+    const player = await this.prisma.player.findUnique({
+      where: { id },
+      include: { team: true },
+    });
+    if (!player) {
+      throw new NotFoundException('球员不存在');
+    }
+
+    // 1. 获取所有的进球、红黄牌等事件
+    const events = await this.prisma.matchEvent.findMany({
+      where: {
+        OR: [
+          { playerId: id },
+          { assistPlayerId: id }
+        ],
+        match: {
+          status: 'finished'
+        }
+      },
+      include: {
+        match: {
+          include: {
+            season: true
+          }
+        }
+      }
+    });
+
+    // 2. 统计每个赛季的数据
+    const seasonStats: Record<string, {
+      seasonId: string;
+      seasonName: string;
+      goals: number;
+      assists: number;
+      yellowCards: number;
+      redCards: number;
+    }> = {};
+
+    events.forEach(event => {
+      const season = event.match?.season;
+      const seasonId = season?.id || 'unknown';
+      const seasonName = season?.name || '未知赛季';
+
+      if (!seasonStats[seasonId]) {
+        seasonStats[seasonId] = {
+          seasonId,
+          seasonName,
+          goals: 0,
+          assists: 0,
+          yellowCards: 0,
+          redCards: 0
+        };
+      }
+
+      const stats = seasonStats[seasonId];
+
+      if (event.playerId === id) {
+        if (event.eventType === 'goal' || event.eventType === 'penalty') {
+          stats.goals += 1;
+        } else if (event.eventType === 'yellow_card') {
+          stats.yellowCards += 1;
+        } else if (event.eventType === 'red_card') {
+          stats.redCards += 1;
+        }
+      }
+
+      if (event.assistPlayerId === id) {
+        if (event.eventType === 'goal' || event.eventType === 'penalty') {
+          stats.assists += 1;
+        }
+      }
+    });
+
+    // 3. 计算出场数 (Player appearances)
+    const teamMatches = await this.prisma.match.findMany({
+      where: {
+        status: 'finished',
+        OR: [
+          { homeTeamId: player.teamId },
+          { awayTeamId: player.teamId }
+        ]
+      },
+      include: {
+        season: true
+      }
+    });
+
+    const matchCountsBySeason: Record<string, number> = {};
+    teamMatches.forEach(m => {
+      const sId = m.season?.id || 'unknown';
+      matchCountsBySeason[sId] = (matchCountsBySeason[sId] || 0) + 1;
+    });
+
+    // 组装最终结果
+    const career = Object.values(seasonStats).map(s => {
+      const teamMatchesCount = matchCountsBySeason[s.seasonId] || 0;
+      return {
+        ...s,
+        appearances: teamMatchesCount
+      };
+    });
+
+    return {
+      player,
+      career
+    };
+  }
 }
