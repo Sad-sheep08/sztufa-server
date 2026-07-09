@@ -61,15 +61,25 @@ export class MatchService {
     }
 
     // 自动同步进球记录到 Goal 表以向下兼容展示端
-    const goalEvents = events ? events.filter(e => e.eventType === 'goal' || e.eventType === 'penalty' || e.eventType === 'own_goal') : [];
+    const goalEvents = events
+      ? events.filter(
+          (e) => e.eventType === 'goal' || e.eventType === 'penalty' || e.eventType === 'own_goal',
+        )
+      : [];
     if (goalEvents.length > 0) {
       await this.prisma.goal.createMany({
         data: goalEvents.map((g) => ({
           matchId: match.id,
-          playerName: g.eventType === 'own_goal' ? `${g.playerName} (乌龙)` : g.eventType === 'penalty' ? `${g.playerName} (点球)` : g.playerName || '',
+          playerName:
+            g.eventType === 'own_goal'
+              ? `${g.playerName} (乌龙)`
+              : g.eventType === 'penalty'
+                ? `${g.playerName} (点球)`
+                : g.playerName || '',
           jerseyNumber: g.jerseyNumber || '',
           goalTime: g.eventTime,
-          teamType: g.eventType === 'own_goal' ? (g.teamType === 'home' ? 'away' : 'home') : g.teamType,
+          teamType:
+            g.eventType === 'own_goal' ? (g.teamType === 'home' ? 'away' : 'home') : g.teamType,
           playerId: g.playerId || null,
         })),
       });
@@ -87,13 +97,20 @@ export class MatchService {
     }
 
     // 同步本场比赛受影响和停赛球员的红黄牌与可用状态
-    await this.syncMatchPlayers(match.id, match.homeTeamId, match.awayTeamId, match.status, events || [], this.prisma);
+    await this.syncMatchPlayers(
+      match.id,
+      match.homeTeamId,
+      match.awayTeamId,
+      match.status,
+      events || [],
+      this.prisma,
+    );
 
     // 记录审计日志
     await this.auditLogService.log(
       username,
       'CREATE_MATCH',
-      `录入了比赛比分与事件: ${homeTeam.teamName} vs ${awayTeam.teamName} (比分: ${createMatchDto.homeScore}:${createMatchDto.awayScore})`
+      `录入了比赛比分与事件: ${homeTeam.teamName} vs ${awayTeam.teamName} (比分: ${createMatchDto.homeScore}:${createMatchDto.awayScore})`,
     );
 
     return this.prisma.match.findUnique({
@@ -209,15 +226,25 @@ export class MatchService {
 
     // 同步进球数据到 Goal 表（向下兼容展示端）
     await this.prisma.goal.deleteMany({ where: { matchId: id } });
-    const goalEvents = events ? events.filter(e => e.eventType === 'goal' || e.eventType === 'penalty' || e.eventType === 'own_goal') : [];
+    const goalEvents = events
+      ? events.filter(
+          (e) => e.eventType === 'goal' || e.eventType === 'penalty' || e.eventType === 'own_goal',
+        )
+      : [];
     if (goalEvents.length > 0) {
       await this.prisma.goal.createMany({
         data: goalEvents.map((g) => ({
           matchId: id,
-          playerName: g.eventType === 'own_goal' ? `${g.playerName} (乌龙)` : g.eventType === 'penalty' ? `${g.playerName} (点球)` : g.playerName || '',
+          playerName:
+            g.eventType === 'own_goal'
+              ? `${g.playerName} (乌龙)`
+              : g.eventType === 'penalty'
+                ? `${g.playerName} (点球)`
+                : g.playerName || '',
           jerseyNumber: g.jerseyNumber || '',
           goalTime: g.eventTime,
-          teamType: g.eventType === 'own_goal' ? (g.teamType === 'home' ? 'away' : 'home') : g.teamType,
+          teamType:
+            g.eventType === 'own_goal' ? (g.teamType === 'home' ? 'away' : 'home') : g.teamType,
           playerId: g.playerId || null,
         })),
       });
@@ -236,7 +263,14 @@ export class MatchService {
 
     // 重新计算并同步所有受影响球员和需解禁停赛球员的状态
     const updatedMatch = await this.prisma.match.findUnique({ where: { id } });
-    await this.syncMatchPlayers(id, updatedMatch.homeTeamId, updatedMatch.awayTeamId, updatedMatch.status, events || [], this.prisma);
+    await this.syncMatchPlayers(
+      id,
+      updatedMatch.homeTeamId,
+      updatedMatch.awayTeamId,
+      updatedMatch.status,
+      events || [],
+      this.prisma,
+    );
 
     // 记录审计日志
     const homeTeamName = match.homeTeam?.teamName || '';
@@ -244,7 +278,7 @@ export class MatchService {
     await this.auditLogService.log(
       username,
       'UPDATE_MATCH',
-      `修改了比赛信息与比分: ${homeTeamName} vs ${awayTeamName} (比分由 ${match.homeScore}:${match.awayScore} 变更为 ${updateMatchDto.homeScore ?? match.homeScore}:${updateMatchDto.awayScore ?? match.awayScore})`
+      `修改了比赛信息与比分: ${homeTeamName} vs ${awayTeamName} (比分由 ${match.homeScore}:${match.awayScore} 变更为 ${updateMatchDto.homeScore ?? match.homeScore}:${updateMatchDto.awayScore ?? match.awayScore})`,
     );
 
     return this.prisma.match.findUnique({
@@ -263,7 +297,7 @@ export class MatchService {
     }
 
     const affectedPlayerIds = new Set<string>();
-    match.events.forEach(e => {
+    match.events.forEach((e) => {
       if (e.playerId) affectedPlayerIds.add(e.playerId);
       if (e.subPlayerId) affectedPlayerIds.add(e.subPlayerId);
       if (e.assistPlayerId) affectedPlayerIds.add(e.assistPlayerId);
@@ -275,7 +309,7 @@ export class MatchService {
         status: 'suspended',
       },
     });
-    suspendedPlayers.forEach(p => affectedPlayerIds.add(p.id));
+    suspendedPlayers.forEach((p) => affectedPlayerIds.add(p.id));
 
     await this.prisma.match.delete({ where: { id } });
 
@@ -287,15 +321,22 @@ export class MatchService {
     await this.auditLogService.log(
       username,
       'DELETE_MATCH',
-      `删除了比赛: ${match.homeTeam.teamName} vs ${match.awayTeam.teamName} (比分: ${match.homeScore}:${match.awayScore})`
+      `删除了比赛: ${match.homeTeam.teamName} vs ${match.awayTeam.teamName} (比分: ${match.homeScore}:${match.awayScore})`,
     );
 
     return match;
   }
 
-  async syncMatchPlayers(matchId: string, homeTeamId: string, awayTeamId: string, status: string, events: any[], tx: any = this.prisma) {
+  async syncMatchPlayers(
+    matchId: string,
+    homeTeamId: string,
+    awayTeamId: string,
+    status: string,
+    events: any[],
+    tx: any = this.prisma,
+  ) {
     const affectedPlayerIds = new Set<string>();
-    events.forEach(e => {
+    events.forEach((e) => {
       if (e.playerId) affectedPlayerIds.add(e.playerId);
       if (e.subPlayerId) affectedPlayerIds.add(e.subPlayerId);
       if (e.assistPlayerId) affectedPlayerIds.add(e.assistPlayerId);
@@ -308,7 +349,7 @@ export class MatchService {
           status: 'suspended',
         },
       });
-      suspendedPlayers.forEach(p => affectedPlayerIds.add(p.id));
+      suspendedPlayers.forEach((p) => affectedPlayerIds.add(p.id));
     }
 
     for (const playerId of affectedPlayerIds) {
@@ -318,7 +359,7 @@ export class MatchService {
 
   async syncPlayerCards(playerId: string, tx: any = this.prisma) {
     const activeSeason = await tx.season.findFirst({
-      where: { status: 'active' }
+      where: { status: 'active' },
     });
     const seasonWhere = activeSeason ? { seasonId: activeSeason.id } : {};
 
@@ -328,25 +369,22 @@ export class MatchService {
         eventType: { in: ['yellow_card', 'red_card'] },
         match: {
           ...seasonWhere,
-          status: { in: ['finished', 'ongoing'] }
-        }
+          status: { in: ['finished', 'ongoing'] },
+        },
       },
       include: {
-        match: true
+        match: true,
       },
-      orderBy: [
-        { match: { matchDate: 'asc' } },
-        { eventTime: 'asc' }
-      ]
+      orderBy: [{ match: { matchDate: 'asc' } }, { eventTime: 'asc' }],
     });
 
-    const yellowEvents = events.filter(e => e.eventType === 'yellow_card');
-    const redEvents = events.filter(e => e.eventType === 'red_card');
+    const yellowEvents = events.filter((e) => e.eventType === 'yellow_card');
+    const redEvents = events.filter((e) => e.eventType === 'red_card');
     const yellows = yellowEvents.length;
     const reds = redEvents.length;
 
     const triggerMatches: any[] = [];
-    redEvents.forEach(e => {
+    redEvents.forEach((e) => {
       if (e.match) triggerMatches.push(e.match);
     });
     yellowEvents.forEach((e, index) => {
@@ -359,11 +397,13 @@ export class MatchService {
     let suspendedAtMatchId: string | null = null;
 
     if (triggerMatches.length > 0) {
-      triggerMatches.sort((a, b) => new Date(b.matchDate).getTime() - new Date(a.matchDate).getTime());
+      triggerMatches.sort(
+        (a, b) => new Date(b.matchDate).getTime() - new Date(a.matchDate).getTime(),
+      );
       const latestTriggerMatch = triggerMatches[0];
 
       const player = await tx.player.findUnique({
-        where: { id: playerId }
+        where: { id: playerId },
       });
       if (player) {
         const servedMatch = await tx.match.findFirst({
@@ -371,12 +411,9 @@ export class MatchService {
             ...seasonWhere,
             status: 'finished',
             matchDate: { gt: latestTriggerMatch.matchDate },
-            OR: [
-              { homeTeamId: player.teamId },
-              { awayTeamId: player.teamId }
-            ]
+            OR: [{ homeTeamId: player.teamId }, { awayTeamId: player.teamId }],
           },
-          orderBy: { matchDate: 'asc' }
+          orderBy: { matchDate: 'asc' },
         });
 
         if (servedMatch) {
@@ -396,7 +433,7 @@ export class MatchService {
         redCards: reds,
         status,
         suspendedAtMatchId,
-      }
+      },
     });
   }
 }

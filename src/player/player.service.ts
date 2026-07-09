@@ -31,6 +31,12 @@ export class PlayerService {
     });
 
     if (existingPlayer) {
+      if (userCtx && userCtx.role === 'coach') {
+        if (existingPlayer.teamId !== userCtx.teamId) {
+          throw new ForbiddenException('该学号的球员已归属于其他球队，您没有权限修改其信息或将其划归至本队');
+        }
+      }
+
       // 如果已存在，则更新球员信息
       const updatedPlayer = await this.prisma.player.update({
         where: { studentId: createPlayerDto.studentId },
@@ -46,7 +52,7 @@ export class PlayerService {
       await this.auditLogService.log(
         username,
         'UPDATE_PLAYER',
-        `因导入/创建查重，覆盖更新了球员信息: ${createPlayerDto.name} (学号: ${createPlayerDto.studentId})`
+        `因导入/创建查重，覆盖更新了球员信息: ${createPlayerDto.name} (学号: ${createPlayerDto.studentId})`,
       );
 
       return updatedPlayer;
@@ -60,7 +66,7 @@ export class PlayerService {
     await this.auditLogService.log(
       username,
       'CREATE_PLAYER',
-      `创建了新球员: ${createPlayerDto.name} (学号: ${createPlayerDto.studentId})`
+      `创建了新球员: ${createPlayerDto.name} (学号: ${createPlayerDto.studentId})`,
     );
 
     return newPlayer;
@@ -130,7 +136,7 @@ export class PlayerService {
     await this.auditLogService.log(
       username,
       'UPDATE_PLAYER',
-      `更新了球员信息: ${player.name} (学号: ${player.studentId})`
+      `更新了球员信息: ${player.name} (学号: ${player.studentId})`,
     );
 
     return updatedPlayer;
@@ -153,7 +159,7 @@ export class PlayerService {
     await this.auditLogService.log(
       username,
       'DELETE_PLAYER',
-      `删除了球员: ${player.name} (学号: ${player.studentId})`
+      `删除了球员: ${player.name} (学号: ${player.studentId})`,
     );
 
     return result;
@@ -178,34 +184,34 @@ export class PlayerService {
     // 1. 获取所有的进球、红黄牌等事件
     const events = await this.prisma.matchEvent.findMany({
       where: {
-        OR: [
-          { playerId: id },
-          { assistPlayerId: id }
-        ],
+        OR: [{ playerId: id }, { assistPlayerId: id }],
         match: {
-          status: 'finished'
-        }
+          status: 'finished',
+        },
       },
       include: {
         match: {
           include: {
-            season: true
-          }
-        }
-      }
+            season: true,
+          },
+        },
+      },
     });
 
     // 2. 统计每个赛季的数据
-    const seasonStats: Record<string, {
-      seasonId: string;
-      seasonName: string;
-      goals: number;
-      assists: number;
-      yellowCards: number;
-      redCards: number;
-    }> = {};
+    const seasonStats: Record<
+      string,
+      {
+        seasonId: string;
+        seasonName: string;
+        goals: number;
+        assists: number;
+        yellowCards: number;
+        redCards: number;
+      }
+    > = {};
 
-    events.forEach(event => {
+    events.forEach((event) => {
       const season = event.match?.season;
       const seasonId = season?.id || 'unknown';
       const seasonName = season?.name || '未知赛季';
@@ -217,7 +223,7 @@ export class PlayerService {
           goals: 0,
           assists: 0,
           yellowCards: 0,
-          redCards: 0
+          redCards: 0,
         };
       }
 
@@ -244,34 +250,31 @@ export class PlayerService {
     const teamMatches = await this.prisma.match.findMany({
       where: {
         status: 'finished',
-        OR: [
-          { homeTeamId: player.teamId },
-          { awayTeamId: player.teamId }
-        ]
+        OR: [{ homeTeamId: player.teamId }, { awayTeamId: player.teamId }],
       },
       include: {
-        season: true
-      }
+        season: true,
+      },
     });
 
     const matchCountsBySeason: Record<string, number> = {};
-    teamMatches.forEach(m => {
+    teamMatches.forEach((m) => {
       const sId = m.season?.id || 'unknown';
       matchCountsBySeason[sId] = (matchCountsBySeason[sId] || 0) + 1;
     });
 
     // 组装最终结果
-    const career = Object.values(seasonStats).map(s => {
+    const career = Object.values(seasonStats).map((s) => {
       const teamMatchesCount = matchCountsBySeason[s.seasonId] || 0;
       return {
         ...s,
-        appearances: teamMatchesCount
+        appearances: teamMatchesCount,
       };
     });
 
     return {
       player,
-      career
+      career,
     };
   }
 }

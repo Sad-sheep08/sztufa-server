@@ -7,7 +7,7 @@ async function main() {
 
   // 1. 查找或创建活跃赛季
   let activeSeason = await prisma.season.findFirst({
-    where: { status: 'active' }
+    where: { status: 'active' },
   });
 
   if (!activeSeason) {
@@ -15,7 +15,7 @@ async function main() {
       data: {
         name: '2026春季赛季',
         status: 'active',
-      }
+      },
     });
     console.log(`已创建默认活跃赛季: ${activeSeason.name} (${activeSeason.id})`);
   } else {
@@ -24,16 +24,18 @@ async function main() {
 
   // 2. 将所有未归属的比赛绑定到当前活跃赛季
   const matchesToUpdate = await prisma.match.findMany({
-    where: { seasonId: null }
+    where: { seasonId: null },
   });
 
   if (matchesToUpdate.length > 0) {
-    console.log(`发现 ${matchesToUpdate.length} 场未绑定赛季的比赛，正在绑定到 ${activeSeason.name}...`);
+    console.log(
+      `发现 ${matchesToUpdate.length} 场未绑定赛季的比赛，正在绑定到 ${activeSeason.name}...`,
+    );
     const updateResult = await prisma.match.updateMany({
       where: { seasonId: null },
       data: {
-        seasonId: activeSeason.id
-      }
+        seasonId: activeSeason.id,
+      },
     });
     console.log(`绑定完成，共更新了 ${updateResult.count} 场比赛。`);
   } else {

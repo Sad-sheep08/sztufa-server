@@ -10,7 +10,7 @@ async function main() {
     console.error('数据库中没有任何球队，请先在管理后台录入一队球队以便教练绑定！');
     return;
   }
-  
+
   const team = teams[0];
   console.log(`找到首个球队: ${team.teamName} (ID: ${team.id})`);
 

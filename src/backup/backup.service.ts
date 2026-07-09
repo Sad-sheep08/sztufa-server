@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  ListObjectsV2Command,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 
@@ -38,12 +43,14 @@ export class BackupService {
     const fileKey = `backups/backup_${Date.now()}.json`;
 
     // 2. 上传至 Cloudflare R2
-    await this.s3Client.send(new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Key: fileKey,
-      Body: buffer,
-      ContentType: 'application/json',
-    }));
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: fileKey,
+        Body: buffer,
+        ContentType: 'application/json',
+      }),
+    );
 
     const downloadUrl = `${process.env.R2_PUBLIC_URL}/${fileKey}`;
 
@@ -51,7 +58,7 @@ export class BackupService {
     await this.auditLogService.log(
       username,
       'CREATE_BACKUP',
-      `手动触发数据库备份，备份文件: ${fileKey}，包含 ${backupData.teams.length} 支球队、${backupData.players.length} 名球员。`
+      `手动触发数据库备份，备份文件: ${fileKey}，包含 ${backupData.teams.length} 支球队、${backupData.players.length} 名球员。`,
     );
 
     return downloadUrl;
@@ -59,15 +66,17 @@ export class BackupService {
 
   async listBackups() {
     try {
-      const response = await this.s3Client.send(new ListObjectsV2Command({
-        Bucket: process.env.R2_BUCKET_NAME,
-        Prefix: 'backups/',
-      }));
+      const response = await this.s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Prefix: 'backups/',
+        }),
+      );
 
       const files = response.Contents || [];
       return files
-        .filter(file => file.Key && file.Key.endsWith('.json'))
-        .map(file => {
+        .filter((file) => file.Key && file.Key.endsWith('.json'))
+        .map((file) => {
           const key = file.Key || '';
           return {
             key,
@@ -92,10 +101,12 @@ export class BackupService {
   async restoreBackup(username: string, key: string): Promise<string> {
     try {
       // 1. 获取云端备份数据
-      const s3Response = await this.s3Client.send(new GetObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME,
-        Key: key,
-      }));
+      const s3Response = await this.s3Client.send(
+        new GetObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: key,
+        }),
+      );
 
       const streamToString = (stream: any): Promise<string> =>
         new Promise((resolve, reject) => {
@@ -121,7 +132,7 @@ export class BackupService {
         await tx.match.deleteMany();
         await tx.team.deleteMany();
         await tx.news.deleteMany();
-        
+
         // 恢复数据
         if (data.teams.length > 0) {
           await tx.team.createMany({ data: data.teams });
@@ -168,7 +179,7 @@ export class BackupService {
       await this.auditLogService.log(
         username,
         'RESTORE_BACKUP',
-        `从备份文件 ${key} 成功还原了数据库。`
+        `从备份文件 ${key} 成功还原了数据库。`,
       );
 
       return '还原成功';

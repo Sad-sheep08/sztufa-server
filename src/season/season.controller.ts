@@ -21,10 +21,7 @@ export class SeasonController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   @Post('archive')
-  async archiveSeason(
-    @Body('name') name: string,
-    @Request() req: any,
-  ) {
+  async archiveSeason(@Body('name') name: string, @Request() req: any) {
     const username = req.user?.username || 'admin';
     return this.seasonService.archiveAndCreateNewSeason(name, username);
   }

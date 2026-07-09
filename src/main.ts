@@ -13,17 +13,17 @@ async function createApp() {
     return appInstance;
   }
 
-  const app = await NestFactory.create(
-    AppModule,
-    new ExpressAdapter(server),
-    { logger: ['error', 'warn', 'log'] }
-  );
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(server), {
+    logger: ['error', 'warn', 'log'],
+  });
 
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    transform: true,
-    forbidNonWhitelisted: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
 
   app.enableCors({
     origin: [
@@ -37,7 +37,7 @@ async function createApp() {
       'https://sztufa.xyz',
       'https://api.sztufa.xyz',
       'https://admin.sztufa.xyz',
-      'https://sztufa-server.vercel.app'
+      'https://sztufa-server.vercel.app',
     ].filter(Boolean),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     credentials: true,
@@ -51,7 +51,7 @@ async function createApp() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  
+
   const expressApp = app.getHttpAdapter().getInstance();
   expressApp.use('/api/docs', express.static(__dirname + '/swagger-ui'));
   expressApp.get('/api/docs/swagger.json', (req, res) => {
