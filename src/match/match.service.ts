@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
@@ -30,7 +30,7 @@ export class MatchService {
     });
     const seasonId = activeSeason ? activeSeason.id : null;
 
-    const { goals, events, ...matchData } = createMatchDto;
+    const { goals, events, lineups, ...matchData } = createMatchDto;
     const match = await this.prisma.match.create({
       data: {
         ...matchData,
@@ -38,6 +38,43 @@ export class MatchService {
       },
       include: { homeTeam: true, awayTeam: true },
     });
+
+    // 写入阵容配置
+    if (lineups && lineups.length > 0) {
+      const uniqueLineups = Array.from(
+        new Map(lineups.map(item => [item.playerId, item])).values()
+      );
+
+      const playerIds = uniqueLineups.map(l => l.playerId);
+      const players = await this.prisma.player.findMany({
+        where: { id: { in: playerIds } }
+      });
+      const playersMap = new Map(players.map(p => [p.id, p]));
+
+      const validLineups = [];
+      for (const item of uniqueLineups) {
+        const p = playersMap.get(item.playerId);
+        if (!p) continue;
+
+        const expectedTeamId = item.teamType === 'home' ? match.homeTeamId : match.awayTeamId;
+        if (p.teamId !== expectedTeamId) {
+          throw new BadRequestException(`球员 ${p.name} 队籍不属于所声明的 ${item.teamType === 'home' ? '主队' : '客队'}`);
+        }
+
+        validLineups.push({
+          matchId: match.id,
+          playerId: item.playerId,
+          teamType: item.teamType,
+          lineupType: item.lineupType
+        });
+      }
+
+      if (validLineups.length > 0) {
+        await this.prisma.matchLineup.createMany({
+          data: validLineups
+        });
+      }
+    }
 
     if (events && events.length > 0) {
       await this.prisma.matchEvent.createMany({
@@ -115,7 +152,7 @@ export class MatchService {
 
     const result = await this.prisma.match.findUnique({
       where: { id: match.id },
-      include: { homeTeam: true, awayTeam: true, goals: true, events: true },
+      include: { homeTeam: true, awayTeam: true, goals: true, events: true, lineups: { include: { player: true } } },
     });
 
     if (result && result.seasonId && result.status === 'finished') {
@@ -153,7 +190,7 @@ export class MatchService {
         skip,
         take: limitNum,
         where,
-        include: { homeTeam: true, awayTeam: true, goals: true, events: true },
+        include: { homeTeam: true, awayTeam: true, goals: true, events: true, lineups: { include: { player: true } } },
         orderBy: { matchDate: 'desc' },
       }),
       this.prisma.match.count({ where }),
@@ -165,7 +202,7 @@ export class MatchService {
   async findOne(id: string) {
     const match = await this.prisma.match.findUnique({
       where: { id },
-      include: { homeTeam: true, awayTeam: true, goals: true, events: true },
+      include: { homeTeam: true, awayTeam: true, goals: true, events: true, lineups: { include: { player: true } } },
     });
     if (!match || match.deletedAt !== null) {
       throw new NotFoundException('比赛不存在');
@@ -200,12 +237,53 @@ export class MatchService {
       }
     }
 
-    const { goals, events, ...matchData } = updateMatchDto;
+    const { goals, events, lineups, ...matchData } = updateMatchDto;
 
     await this.prisma.match.update({
       where: { id },
       data: matchData,
     });
+
+    // 重新写入阵容配置
+    if (lineups !== undefined) {
+      await this.prisma.matchLineup.deleteMany({ where: { matchId: id } });
+
+      if (lineups.length > 0) {
+        const uniqueLineups = Array.from(
+          new Map(lineups.map(item => [item.playerId, item])).values()
+        );
+
+        const playerIds = uniqueLineups.map(l => l.playerId);
+        const players = await this.prisma.player.findMany({
+          where: { id: { in: playerIds } }
+        });
+        const playersMap = new Map(players.map(p => [p.id, p]));
+
+        const validLineups = [];
+        for (const item of uniqueLineups) {
+          const p = playersMap.get(item.playerId);
+          if (!p) continue;
+
+          const expectedTeamId = item.teamType === 'home' ? match.homeTeamId : match.awayTeamId;
+          if (p.teamId !== expectedTeamId) {
+            throw new BadRequestException(`球员 ${p.name} 队籍不属于所声明的 ${item.teamType === 'home' ? '主队' : '客队'}`);
+          }
+
+          validLineups.push({
+            matchId: id,
+            playerId: item.playerId,
+            teamType: item.teamType,
+            lineupType: item.lineupType
+          });
+        }
+
+        if (validLineups.length > 0) {
+          await this.prisma.matchLineup.createMany({
+            data: validLineups
+          });
+        }
+      }
+    }
 
     // 同步比赛事件数据
     await this.prisma.matchEvent.deleteMany({ where: { matchId: id } });
@@ -289,7 +367,7 @@ export class MatchService {
 
     const result = await this.prisma.match.findUnique({
       where: { id },
-      include: { homeTeam: true, awayTeam: true, goals: true, events: true },
+      include: { homeTeam: true, awayTeam: true, goals: true, events: true, lineups: { include: { player: true } } },
     });
 
     if (result && result.seasonId) {

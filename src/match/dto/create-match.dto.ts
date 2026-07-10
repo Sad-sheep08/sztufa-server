@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsInt, IsOptional, IsDateString } from 'class-validator';
+import { IsString, IsInt, IsOptional, IsDateString, IsArray, ValidateNested, IsIn } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateMatchDto {
   @ApiProperty({ description: '主队ID' })
@@ -50,4 +51,27 @@ export class CreateMatchDto {
   @IsOptional()
   @IsString()
   mvpPlayerName?: string;
+
+  @ApiProperty({ description: '比赛阵容列表', required: false, type: 'array' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MatchLineupDto)
+  lineups?: MatchLineupDto[];
+}
+
+export class MatchLineupDto {
+  @ApiProperty({ description: '球员ID' })
+  @IsString()
+  playerId: string;
+
+  @ApiProperty({ description: '归属方', example: 'home' })
+  @IsString()
+  @IsIn(['home', 'away'])
+  teamType: 'home' | 'away';
+
+  @ApiProperty({ description: '阵容类型', example: 'starting' })
+  @IsString()
+  @IsIn(['starting', 'substitute'])
+  lineupType: 'starting' | 'substitute';
 }
