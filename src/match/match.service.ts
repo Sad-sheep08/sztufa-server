@@ -177,6 +177,7 @@ export class MatchService {
       }
     }
 
+    console.log('[MatchService.findAll] targetSeasonId received:', targetSeasonId);
     const where: any = { deletedAt: null };
     if (targetSeasonId && targetSeasonId !== 'all') {
       where.seasonId = targetSeasonId;
