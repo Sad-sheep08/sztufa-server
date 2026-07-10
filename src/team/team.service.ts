@@ -60,8 +60,24 @@ export class TeamService {
       throw new NotFoundException('球队不存在');
     }
     
-    // 软删除并释放唯一队名占位约束，加上时间戳
     const timestamp = Date.now();
+
+    // 1. 级联软删除该球队名下的所有在队球员，并安全释放其学号唯一键约束以防冲突
+    const teamPlayers = await this.prisma.player.findMany({
+      where: { teamId: id, deletedAt: null }
+    });
+
+    for (const player of teamPlayers) {
+      await this.prisma.player.update({
+        where: { id: player.id },
+        data: {
+          deletedAt: new Date(),
+          studentId: `${player.studentId}_deleted_${timestamp}`
+        }
+      });
+    }
+
+    // 2. 软删除该球队并释放唯一队名约束
     return this.prisma.team.update({
       where: { id },
       data: {
