@@ -17,79 +17,26 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         const seasons = await this.season.findMany();
         const allPlayers = await this.player.findMany();
 
-        // 2. 找到当前活跃赛季
-        const activeSeason = seasons.find(s => s.status === 'active') || seasons[0];
-
-        if (activeSeason) {
-          console.log(`[Startup Migration] Registering current active players to season: ${activeSeason.name}`);
-          // 将当前数据库中的所有球员登记为活跃赛季的名册成员
+        // 2. 将所有已有球员登记注册进系统中的所有赛季名册中
+        // （由于系统之前没有 SeasonTeamPlayer，所有当前活跃的球员在以往赛季也默认在队）
+        for (const season of seasons) {
+          console.log(`[Startup Migration] Registering players to season: ${season.name}`);
           for (const player of allPlayers) {
             await this.seasonTeamPlayer.upsert({
               where: {
                 seasonId_playerId: {
-                  seasonId: activeSeason.id,
+                  seasonId: season.id,
                   playerId: player.id
                 }
               },
               create: {
-                seasonId: activeSeason.id,
+                seasonId: season.id,
                 teamId: player.teamId,
                 playerId: player.id
               },
               update: {}
             }).catch(err => {
-              console.error(`[Startup Migration] Failed to register player ${player.name} to active season:`, err.message);
-            });
-          }
-        }
-
-        // 3. 扫描历史比赛，解析归纳出往期历史赛季名册并回填
-        console.log('[Startup Migration] Scanning historical matches for past season rosters...');
-        const matches = await this.match.findMany({
-          include: {
-            goals: true,
-            events: true
-          }
-        });
-
-        for (const match of matches) {
-          if (!match.seasonId) continue;
-          
-          const playerToTeamMap = new Map<string, string>();
-
-          // 从进球中提取
-          match.goals.forEach(goal => {
-            if (goal.playerId) {
-              const teamId = goal.teamType === 'home' ? match.homeTeamId : match.awayTeamId;
-              playerToTeamMap.set(goal.playerId, teamId);
-            }
-          });
-
-          // 从比赛事件中提取 (主罚/红黄牌/助攻等)
-          match.events.forEach(event => {
-            const teamId = event.teamType === 'home' ? match.homeTeamId : match.awayTeamId;
-            if (event.playerId) playerToTeamMap.set(event.playerId, teamId);
-            if (event.subPlayerId) playerToTeamMap.set(event.subPlayerId, teamId);
-            if (event.assistPlayerId) playerToTeamMap.set(event.assistPlayerId, teamId);
-          });
-
-          // 写入 SeasonTeamPlayer
-          for (const [playerId, teamId] of playerToTeamMap.entries()) {
-            await this.seasonTeamPlayer.upsert({
-              where: {
-                seasonId_playerId: {
-                  seasonId: match.seasonId,
-                  playerId: playerId
-                }
-              },
-              create: {
-                seasonId: match.seasonId,
-                teamId: teamId,
-                playerId: playerId
-              },
-              update: {}
-            }).catch(() => {
-              // 忽略由于外键约束引发的个别异常（如球员已被物理删除）
+              console.error(`[Startup Migration] Failed to register player ${player.name} to season ${season.name}:`, err.message);
             });
           }
         }
