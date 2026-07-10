@@ -21,16 +21,16 @@ export class PlayerService {
     const team = await this.prisma.team.findUnique({
       where: { id: createPlayerDto.teamId },
     });
-    if (!team) {
+    if (!team || team.deletedAt !== null) {
       throw new NotFoundException('球队不存在');
     }
 
-    // 检查学号是否已存在
+    // 检查学号是否已存在且未被删除
     const existingPlayer = await this.prisma.player.findUnique({
       where: { studentId: createPlayerDto.studentId },
     });
 
-    if (existingPlayer) {
+    if (existingPlayer && existingPlayer.deletedAt === null) {
       if (userCtx && userCtx.role === 'coach') {
         if (existingPlayer.teamId !== userCtx.teamId) {
           throw new ForbiddenException('该学号的球员已归属于其他球队，您没有权限修改其信息或将其划归至本队');
@@ -49,6 +49,27 @@ export class PlayerService {
         include: { team: true },
       });
 
+      // 自动同步绑定至当前活跃赛季
+      const activeSeason = await this.prisma.season.findFirst({ where: { status: 'active' } });
+      if (activeSeason) {
+        await this.prisma.seasonTeamPlayer.upsert({
+          where: {
+            seasonId_playerId: {
+              seasonId: activeSeason.id,
+              playerId: updatedPlayer.id
+            }
+          },
+          create: {
+            seasonId: activeSeason.id,
+            teamId: updatedPlayer.teamId,
+            playerId: updatedPlayer.id
+          },
+          update: {
+            teamId: updatedPlayer.teamId
+          }
+        });
+      }
+
       await this.auditLogService.log(
         username,
         'UPDATE_PLAYER',
@@ -63,6 +84,27 @@ export class PlayerService {
       include: { team: true },
     });
 
+    // 新增球员自动绑定至当前活跃赛季
+    const activeSeason = await this.prisma.season.findFirst({ where: { status: 'active' } });
+    if (activeSeason) {
+      await this.prisma.seasonTeamPlayer.upsert({
+        where: {
+          seasonId_playerId: {
+            seasonId: activeSeason.id,
+            playerId: newPlayer.id
+          }
+        },
+        create: {
+          seasonId: activeSeason.id,
+          teamId: newPlayer.teamId,
+          playerId: newPlayer.id
+        },
+        update: {
+          teamId: newPlayer.teamId
+        }
+      });
+    }
+
     await this.auditLogService.log(
       username,
       'CREATE_PLAYER',
@@ -76,7 +118,7 @@ export class PlayerService {
     const pageNum = Math.max(1, Number(page) || 1);
     const limitNum = Math.max(1, Math.min(100, Number(limit) || 10));
     const skip = (pageNum - 1) * limitNum;
-    const where = teamId ? { teamId } : {};
+    const where = teamId ? { teamId, deletedAt: null } : { deletedAt: null };
 
     const [data, total] = await Promise.all([
       this.prisma.player.findMany({
@@ -97,7 +139,7 @@ export class PlayerService {
       where: { id },
       include: { team: true },
     });
-    if (!player) {
+    if (!player || player.deletedAt !== null) {
       throw new NotFoundException('球员不存在');
     }
     return player;
@@ -105,7 +147,7 @@ export class PlayerService {
 
   async update(id: string, updatePlayerDto: UpdatePlayerDto, username: string, userCtx?: any) {
     const player = await this.prisma.player.findUnique({ where: { id } });
-    if (!player) {
+    if (!player || player.deletedAt !== null) {
       throw new NotFoundException('球员不存在');
     }
 
@@ -122,7 +164,7 @@ export class PlayerService {
       const team = await this.prisma.team.findUnique({
         where: { id: updatePlayerDto.teamId },
       });
-      if (!team) {
+      if (!team || team.deletedAt !== null) {
         throw new NotFoundException('球队不存在');
       }
     }
@@ -132,6 +174,29 @@ export class PlayerService {
       data: updatePlayerDto,
       include: { team: true },
     });
+
+    // 如果队籍发生迁移，同步更新当前活跃赛季名册信息
+    if (updatePlayerDto.teamId) {
+      const activeSeason = await this.prisma.season.findFirst({ where: { status: 'active' } });
+      if (activeSeason) {
+        await this.prisma.seasonTeamPlayer.upsert({
+          where: {
+            seasonId_playerId: {
+              seasonId: activeSeason.id,
+              playerId: id
+            }
+          },
+          create: {
+            seasonId: activeSeason.id,
+            teamId: updatePlayerDto.teamId,
+            playerId: id
+          },
+          update: {
+            teamId: updatePlayerDto.teamId
+          }
+        });
+      }
+    }
 
     await this.auditLogService.log(
       username,
@@ -144,7 +209,7 @@ export class PlayerService {
 
   async remove(id: string, username: string, userCtx?: any) {
     const player = await this.prisma.player.findUnique({ where: { id } });
-    if (!player) {
+    if (!player || player.deletedAt !== null) {
       throw new NotFoundException('球员不存在');
     }
 
@@ -154,7 +219,15 @@ export class PlayerService {
       }
     }
 
-    const result = await this.prisma.player.delete({ where: { id } });
+    // 软删除并释放学号唯一约束
+    const timestamp = Date.now();
+    const result = await this.prisma.player.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        studentId: `${player.studentId}_deleted_${timestamp}`
+      }
+    });
 
     await this.auditLogService.log(
       username,
@@ -167,7 +240,7 @@ export class PlayerService {
 
   async searchByName(name: string) {
     return this.prisma.player.findMany({
-      where: { name: { contains: name } },
+      where: { name: { contains: name }, deletedAt: null },
       include: { team: true },
     });
   }
@@ -177,7 +250,7 @@ export class PlayerService {
       where: { id },
       include: { team: true },
     });
-    if (!player) {
+    if (!player || player.deletedAt !== null) {
       throw new NotFoundException('球员不存在');
     }
 

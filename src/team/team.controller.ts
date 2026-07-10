@@ -56,6 +56,15 @@ export class TeamController {
     return this.teamService.findOne(id);
   }
 
+  @Get(':id/players')
+  @ApiOperation({ summary: '获取球队在特定赛季的球员名册' })
+  getTeamRoster(
+    @Param('id') id: string,
+    @Query('seasonId') seasonId?: string,
+  ) {
+    return this.teamService.getTeamRoster(id, seasonId);
+  }
+
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin', 'coach')

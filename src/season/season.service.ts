@@ -56,8 +56,24 @@ export class SeasonService {
         },
       });
 
-      // 3. 重置所有球员在新赛季的状态与累计卡片数
+      // 3. 将所有未删除的活跃球员一键自动登记注册进新赛季的名册表 SeasonTeamPlayer 中
+      const activePlayers = await tx.player.findMany({
+        where: { deletedAt: null }
+      });
+
+      for (const player of activePlayers) {
+        await tx.seasonTeamPlayer.create({
+          data: {
+            seasonId: newSeason.id,
+            teamId: player.teamId,
+            playerId: player.id
+          }
+        });
+      }
+
+      // 4. 重置所有球员在新赛季的状态与累计卡片数
       await tx.player.updateMany({
+        where: { deletedAt: null },
         data: {
           yellowCards: 0,
           redCards: 0,
@@ -70,10 +86,32 @@ export class SeasonService {
       await this.auditLogService.log(
         username,
         'ARCHIVE_SEASON',
-        `成功归档往期赛季，并开启新赛季 "${trimmedName}"，重置了所有球员的红黄牌与可用状态。`,
+        `成功归档往期赛季，并开启新赛季 "${trimmedName}"，将存量球员注册到新赛季名册并重置了红黄牌。`,
       );
 
       return newSeason;
     });
+  }
+
+  async getSeasonStandings(id: string) {
+    const season = await this.prisma.season.findUnique({
+      where: { id },
+      select: { standingsCache: true }
+    });
+    if (!season) {
+      throw new BadRequestException('赛季不存在');
+    }
+    return season.standingsCache || [];
+  }
+
+  async getSeasonStats(id: string) {
+    const season = await this.prisma.season.findUnique({
+      where: { id },
+      select: { statsCache: true }
+    });
+    if (!season) {
+      throw new BadRequestException('赛季不存在');
+    }
+    return season.statsCache || { scorers: [], assists: [], cards: [] };
   }
 }

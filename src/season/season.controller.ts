@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Request, Param } from '@nestjs/common';
 import { SeasonService } from './season.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -16,6 +16,16 @@ export class SeasonController {
   @Get('active')
   async getActiveSeason() {
     return this.seasonService.getActiveSeason();
+  }
+
+  @Get(':id/standings')
+  async getSeasonStandings(@Param('id') id: string) {
+    return this.seasonService.getSeasonStandings(id);
+  }
+
+  @Get(':id/stats')
+  async getSeasonStats(@Param('id') id: string) {
+    return this.seasonService.getSeasonStats(id);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

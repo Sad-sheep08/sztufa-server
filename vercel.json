@@ -11,5 +11,11 @@
       "src": "/(.*)",
       "dest": "/api/index.js"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/v1/backups/auto-backup",
+      "schedule": "0 3 * * 1"
+    }
   ]
 }

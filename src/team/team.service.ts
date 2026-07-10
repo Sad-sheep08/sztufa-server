@@ -10,7 +10,7 @@ export class TeamService {
   async create(createTeamDto: CreateTeamDto) {
     return this.prisma.team.create({
       data: createTeamDto,
-      include: { players: true },
+      include: { players: { where: { deletedAt: null } } },
     });
   }
 
@@ -22,10 +22,11 @@ export class TeamService {
       this.prisma.team.findMany({
         skip,
         take: limitNum,
-        include: { players: true },
+        where: { deletedAt: null },
+        include: { players: { where: { deletedAt: null } } },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.team.count(),
+      this.prisma.team.count({ where: { deletedAt: null } }),
     ]);
     return { data, total, page: pageNum, limit: limitNum };
   }
@@ -33,9 +34,9 @@ export class TeamService {
   async findOne(id: string) {
     const team = await this.prisma.team.findUnique({
       where: { id },
-      include: { players: true },
+      include: { players: { where: { deletedAt: null } } },
     });
-    if (!team) {
+    if (!team || team.deletedAt !== null) {
       throw new NotFoundException('球队不存在');
     }
     return team;
@@ -43,28 +44,78 @@ export class TeamService {
 
   async update(id: string, updateTeamDto: UpdateTeamDto) {
     const team = await this.prisma.team.findUnique({ where: { id } });
-    if (!team) {
+    if (!team || team.deletedAt !== null) {
       throw new NotFoundException('球队不存在');
     }
     return this.prisma.team.update({
       where: { id },
       data: updateTeamDto,
-      include: { players: true },
+      include: { players: { where: { deletedAt: null } } },
     });
   }
 
   async remove(id: string) {
     const team = await this.prisma.team.findUnique({ where: { id } });
-    if (!team) {
+    if (!team || team.deletedAt !== null) {
       throw new NotFoundException('球队不存在');
     }
-    return this.prisma.team.delete({ where: { id } });
+    
+    // 软删除并释放唯一队名占位约束，加上时间戳
+    const timestamp = Date.now();
+    return this.prisma.team.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        teamName: `${team.teamName}_deleted_${timestamp}`
+      }
+    });
   }
 
   async searchByName(name: string) {
     return this.prisma.team.findMany({
-      where: { teamName: { contains: name } },
-      include: { players: true },
+      where: { teamName: { contains: name }, deletedAt: null },
+      include: { players: { where: { deletedAt: null } } },
     });
+  }
+
+  async getTeamRoster(teamId: string, seasonId?: string) {
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId }
+    });
+    if (!team || team.deletedAt !== null) {
+      throw new NotFoundException('球队不存在');
+    }
+
+    let targetSeasonId = seasonId;
+    if (!targetSeasonId) {
+      const activeSeason = await this.prisma.season.findFirst({
+        where: { status: 'active' }
+      });
+      if (!activeSeason) {
+        throw new NotFoundException('当前无活跃赛季');
+      }
+      targetSeasonId = activeSeason.id;
+    }
+
+    const rosterRecords = await this.prisma.seasonTeamPlayer.findMany({
+      where: {
+        seasonId: targetSeasonId,
+        teamId: teamId,
+        player: {
+          deletedAt: null
+        }
+      },
+      include: {
+        player: true
+      }
+    });
+
+    return rosterRecords
+      .map(r => r.player)
+      .sort((a, b) => {
+        const numA = parseInt(a.jerseyNumber, 10) || 999;
+        const numB = parseInt(b.jerseyNumber, 10) || 999;
+        return numA - numB;
+      });
   }
 }

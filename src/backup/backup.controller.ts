@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Req, UseGuards, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { BackupService } from './backup.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -7,13 +7,12 @@ import { Roles } from '../auth/roles.decorator';
 
 @Controller('api/v1/backups')
 @ApiTags('备份管理')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('super_admin')
 export class BackupController {
   constructor(private readonly backupService: BackupService) {}
 
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
   @Post('create')
   @ApiOperation({ summary: '创建数据库备份并上传 R2' })
   async create(@Req() req: any) {
@@ -23,7 +22,8 @@ export class BackupController {
   }
 
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
   @Get('list')
   @ApiOperation({ summary: '获取云端备份文件列表' })
   async list() {
@@ -32,12 +32,28 @@ export class BackupController {
   }
 
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
   @Post('restore')
   @ApiOperation({ summary: '根据备份文件还原数据库' })
   async restore(@Req() req: any, @Body('key') key: string) {
     const username = req.user?.username || 'system';
     const result = await this.backupService.restoreBackup(username, key);
     return { success: true, message: result };
+  }
+
+  @Post('auto-backup')
+  @ApiOperation({ summary: 'Vercel Cron 自动定时备份接口' })
+  async autoBackup(@Req() req: any) {
+    const authHeader = req.headers['authorization'];
+    const expectedToken = `Bearer ${process.env.CRON_SECRET}`;
+
+    // 如果配置了 CRON_SECRET 则强制进行 Token 比对校验安全性
+    if (process.env.CRON_SECRET && authHeader !== expectedToken) {
+      throw new ForbiddenException('未授权的定时备份请求');
+    }
+
+    const downloadUrl = await this.backupService.createBackup('vercel-cron-system');
+    return { success: true, downloadUrl };
   }
 }

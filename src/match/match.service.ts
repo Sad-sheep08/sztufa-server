@@ -113,10 +113,16 @@ export class MatchService {
       `录入了比赛比分与事件: ${homeTeam.teamName} vs ${awayTeam.teamName} (比分: ${createMatchDto.homeScore}:${createMatchDto.awayScore})`,
     );
 
-    return this.prisma.match.findUnique({
+    const result = await this.prisma.match.findUnique({
       where: { id: match.id },
       include: { homeTeam: true, awayTeam: true, goals: true, events: true },
     });
+
+    if (result && result.seasonId && result.status === 'finished') {
+      await this.prisma.computeAndCacheSeasonStats(result.seasonId);
+    }
+
+    return result;
   }
 
   async findAll(page: number = 1, limit: number = 10, teamId?: string, seasonId?: string) {
@@ -134,7 +140,7 @@ export class MatchService {
       }
     }
 
-    const where: any = {};
+    const where: any = { deletedAt: null };
     if (targetSeasonId && targetSeasonId !== 'all') {
       where.seasonId = targetSeasonId;
     }
@@ -161,7 +167,7 @@ export class MatchService {
       where: { id },
       include: { homeTeam: true, awayTeam: true, goals: true, events: true },
     });
-    if (!match) {
+    if (!match || match.deletedAt !== null) {
       throw new NotFoundException('比赛不存在');
     }
     return match;
@@ -281,10 +287,16 @@ export class MatchService {
       `修改了比赛信息与比分: ${homeTeamName} vs ${awayTeamName} (比分由 ${match.homeScore}:${match.awayScore} 变更为 ${updateMatchDto.homeScore ?? match.homeScore}:${updateMatchDto.awayScore ?? match.awayScore})`,
     );
 
-    return this.prisma.match.findUnique({
+    const result = await this.prisma.match.findUnique({
       where: { id },
       include: { homeTeam: true, awayTeam: true, goals: true, events: true },
     });
+
+    if (result && result.seasonId) {
+      await this.prisma.computeAndCacheSeasonStats(result.seasonId);
+    }
+
+    return result;
   }
 
   async remove(id: string, username: string) {
@@ -292,7 +304,7 @@ export class MatchService {
       where: { id },
       include: { homeTeam: true, awayTeam: true, events: true },
     });
-    if (!match) {
+    if (!match || match.deletedAt !== null) {
       throw new NotFoundException('比赛不存在');
     }
 
@@ -311,11 +323,19 @@ export class MatchService {
     });
     suspendedPlayers.forEach((p) => affectedPlayerIds.add(p.id));
 
-    await this.prisma.match.delete({ where: { id } });
+    // 软删除比赛
+    const deletedMatch = await this.prisma.match.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
 
     // 同步受影响球员的状态
     for (const playerId of affectedPlayerIds) {
       await this.syncPlayerCards(playerId, this.prisma);
+    }
+
+    if (deletedMatch.seasonId) {
+      await this.prisma.computeAndCacheSeasonStats(deletedMatch.seasonId);
     }
 
     await this.auditLogService.log(
@@ -324,7 +344,7 @@ export class MatchService {
       `删除了比赛: ${match.homeTeam.teamName} vs ${match.awayTeam.teamName} (比分: ${match.homeScore}:${match.awayScore})`,
     );
 
-    return match;
+    return deletedMatch;
   }
 
   async syncMatchPlayers(

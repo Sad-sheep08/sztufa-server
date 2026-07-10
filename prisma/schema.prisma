@@ -24,10 +24,13 @@ model Team {
   homeMatches     Match[]   @relation("HomeTeam")
   awayMatches     Match[]   @relation("AwayTeam")
   users           User[]
+  deletedAt       DateTime?
+  seasonPlayers   SeasonTeamPlayer[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([teamName])
+  @@index([deletedAt])
 }
 
 model Player {
@@ -47,11 +50,15 @@ model Player {
   subEvents           MatchEvent[] @relation("EventSubPlayer")
   assistEvents        MatchEvent[] @relation("EventAssistPlayer")
   mvpMatches          Match[]      @relation("MatchMvpPlayer")
+  deletedAt           DateTime?
+  seasonPlayers       SeasonTeamPlayer[]
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   @@index([teamId])
   @@index([studentId])
+  @@index([deletedAt])
+  @@index([teamId, deletedAt])
 }
 
 model Match {
@@ -72,14 +79,16 @@ model Match {
   mvpPlayerId     String?
   mvpPlayer       Player?       @relation("MatchMvpPlayer", fields: [mvpPlayerId], references: [id])
   mvpPlayerName   String?
+  deletedAt       DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   @@index([homeTeamId])
   @@index([awayTeamId])
   @@index([matchDate])
-  @@index([seasonId])
+  @@index([seasonId, deletedAt])
   @@index([mvpPlayerId])
+  @@index([deletedAt])
 }
 
 model Goal {
@@ -124,6 +133,7 @@ model MatchEvent {
   @@index([playerId])
   @@index([subPlayerId])
   @@index([assistPlayerId])
+  @@index([matchId, eventTime])
 }
 
 model News {
@@ -171,10 +181,29 @@ model AuditLog {
 }
 
 model Season {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  status         String   @default("active") // active, archived
+  matches        Match[]
+  standingsCache Json?
+  statsCache     Json?
+  teamPlayers    SeasonTeamPlayer[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model SeasonTeamPlayer {
   id        String   @id @default(cuid())
-  name      String   @unique
-  status    String   @default("active") // active, archived
-  matches   Match[]
+  seasonId  String
+  teamId    String
+  playerId  String
+  season    Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  @@unique([seasonId, playerId])
+  @@index([seasonId])
+  @@index([teamId])
+  @@index([playerId])
 }
