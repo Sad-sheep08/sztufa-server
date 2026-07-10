@@ -95,24 +95,32 @@ export class ImportService {
           result.success++;
         }
 
+        const activeSeason = await tx.season.findFirst({
+          where: { status: 'active' },
+        });
+
         for (const player of teamData.players) {
           try {
             const existingPlayer = await tx.player.findUnique({
               where: { studentId: player.studentId },
             });
 
+            let finalPlayerId: string;
+
             if (existingPlayer) {
-              await tx.player.update({
+              const updated = await tx.player.update({
                 where: { id: existingPlayer.id },
                 data: {
                   name: player.name,
                   jerseyNumber: player.jerseyNumber,
                   photo: player.photo,
                   teamId,
+                  deletedAt: null, // 如果之前被软删除了，导入时恢复
                 },
               });
+              finalPlayerId = updated.id;
             } else {
-              await tx.player.create({
+              const created = await tx.player.create({
                 data: {
                   id: player.id,
                   name: player.name,
@@ -122,7 +130,29 @@ export class ImportService {
                   teamId,
                 },
               });
+              finalPlayerId = created.id;
             }
+
+            // 同步绑定到当前活跃赛季的名册表
+            if (activeSeason) {
+              await tx.seasonTeamPlayer.upsert({
+                where: {
+                  seasonId_playerId: {
+                    seasonId: activeSeason.id,
+                    playerId: finalPlayerId,
+                  },
+                },
+                create: {
+                  seasonId: activeSeason.id,
+                  teamId,
+                  playerId: finalPlayerId,
+                },
+                update: {
+                  teamId,
+                },
+              });
+            }
+
             result.success++;
           } catch (error) {
             result.failed++;
