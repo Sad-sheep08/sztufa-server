@@ -4,12 +4,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async register(createUserDto: CreateUserDto) {
@@ -32,6 +34,12 @@ export class AuthService {
       },
     });
 
+    await this.auditLogService.log(
+      'system',
+      'USER_REGISTER',
+      `新用户 "${username}" 注册成功，初始角色为: ${user.role}`,
+    );
+
     const token = this.jwtService.sign({ userId: user.id, role: user.role });
     return { user, token };
   }
@@ -43,6 +51,12 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(password, user.password))) {
       throw new UnauthorizedException('用户名或密码错误');
     }
+
+    await this.auditLogService.log(
+      username,
+      'USER_LOGIN',
+      `用户 "${username}" 成功登录系统`,
+    );
 
     const token = this.jwtService.sign({ userId: user.id, role: user.role });
     return {
@@ -77,8 +91,10 @@ export class AuthService {
     });
   }
 
-  async updateUserRole(id: string, role: string, teamId: string | null) {
-    return this.prisma.user.update({
+  async updateUserRole(id: string, role: string, teamId: string | null, operatorUsername: string = 'admin') {
+    const userBefore = await this.prisma.user.findUnique({ where: { id }, include: { team: true } });
+    
+    const updatedUser = await this.prisma.user.update({
       where: { id },
       data: {
         role,
@@ -89,19 +105,50 @@ export class AuthService {
         username: true,
         role: true,
         teamId: true,
+        team: true,
       },
     });
+
+    const diffs: string[] = [];
+    if (userBefore.role !== role) {
+      diffs.push(`角色: "${userBefore.role}" -> "${role}"`);
+    }
+    if (userBefore.teamId !== teamId) {
+      const oldTeamName = userBefore.team?.teamName || '无';
+      const newTeamName = updatedUser.team?.teamName || '无';
+      diffs.push(`绑定球队: "${oldTeamName}" -> "${newTeamName}"`);
+    }
+
+    const details = diffs.length > 0
+      ? `修改了用户 "${updatedUser.username}" 的权限设置: ${diffs.join(', ')}`
+      : `保存了用户 "${updatedUser.username}" 的权限设置(未做改动)`;
+
+    await this.auditLogService.log(operatorUsername, 'UPDATE_USER_ROLE', details);
+
+    return updatedUser;
   }
 
-  async deleteUser(id: string) {
-    return this.prisma.user.delete({
+  async deleteUser(id: string, operatorUsername: string = 'admin') {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    
+    const deletedUser = await this.prisma.user.delete({
       where: { id },
     });
+
+    await this.auditLogService.log(
+      operatorUsername,
+      'DELETE_USER',
+      `删除了用户账号: "${user.username}" (原角色: ${user.role})`,
+    );
+
+    return deletedUser;
   }
 
-  async resetPassword(id: string, newPassword: string) {
+  async resetPassword(id: string, newPassword: string, operatorUsername: string = 'admin') {
+    const user = await this.prisma.user.findUnique({ where: { id } });
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    return this.prisma.user.update({
+    
+    const updatedUser = await this.prisma.user.update({
       where: { id },
       data: { password: hashedPassword },
       select: {
@@ -110,5 +157,13 @@ export class AuthService {
         role: true,
       },
     });
+
+    await this.auditLogService.log(
+      operatorUsername,
+      'RESET_USER_PASSWORD',
+      `重置了用户 "${user.username}" 的登录密码`,
+    );
+
+    return updatedUser;
   }
 }

@@ -358,12 +358,41 @@ export class MatchService {
     );
 
     // 记录审计日志
+    const diffs: string[] = [];
+    if (updateMatchDto.homeScore !== undefined && updateMatchDto.homeScore !== match.homeScore) {
+      diffs.push(`主队比分: ${match.homeScore} -> ${updateMatchDto.homeScore}`);
+    }
+    if (updateMatchDto.awayScore !== undefined && updateMatchDto.awayScore !== match.awayScore) {
+      diffs.push(`客队比分: ${match.awayScore} -> ${updateMatchDto.awayScore}`);
+    }
+    if (updateMatchDto.location !== undefined && updateMatchDto.location !== match.location) {
+      diffs.push(`地点: "${match.location || '未定'}" -> "${updateMatchDto.location || '未定'}"`);
+    }
+    if (updateMatchDto.matchDate !== undefined && new Date(updateMatchDto.matchDate).getTime() !== new Date(match.matchDate).getTime()) {
+      diffs.push(`比赛时间已更新`);
+    }
+    if (updateMatchDto.status !== undefined && updateMatchDto.status !== match.status) {
+      diffs.push(`状态: "${match.status}" -> "${updateMatchDto.status}"`);
+    }
+    if (events !== undefined) {
+      const oldEventsCount = match.events?.length || 0;
+      const newEventsCount = events.length;
+      diffs.push(`比赛事件: 已重置并录入 ${newEventsCount} 个事件(原为 ${oldEventsCount} 个)`);
+    }
+    if (lineups !== undefined) {
+      diffs.push(`阵容配置已更新`);
+    }
+
     const homeTeamName = match.homeTeam?.teamName || '';
     const awayTeamName = match.awayTeam?.teamName || '';
+    const details = diffs.length > 0
+      ? `修改了比赛 "${homeTeamName} vs ${awayTeamName}" 的信息: ${diffs.join(', ')}`
+      : `保存了比赛 "${homeTeamName} vs ${awayTeamName}" 的信息 (未做实际改动)`;
+
     await this.auditLogService.log(
       username,
       'UPDATE_MATCH',
-      `修改了比赛信息与比分: ${homeTeamName} vs ${awayTeamName} (比分由 ${match.homeScore}:${match.awayScore} 变更为 ${updateMatchDto.homeScore ?? match.homeScore}:${updateMatchDto.awayScore ?? match.awayScore})`,
+      details,
     );
 
     const result = await this.prisma.match.findUnique({

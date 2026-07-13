@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Patch, Delete, Param, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, Delete, Param, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -42,8 +42,10 @@ export class AuthController {
     @Param('id') id: string,
     @Body('role') role: string,
     @Body('teamId') teamId: string | null,
+    @Req() req: any,
   ) {
-    return this.authService.updateUserRole(id, role, teamId);
+    const operatorUsername = req.user?.username || 'admin';
+    return this.authService.updateUserRole(id, role, teamId, operatorUsername);
   }
 
   @ApiBearerAuth()
@@ -51,8 +53,9 @@ export class AuthController {
   @Roles('super_admin')
   @Delete('users/:id')
   @ApiOperation({ summary: '删除用户账号（仅超级管理员）' })
-  async deleteUser(@Param('id') id: string) {
-    return this.authService.deleteUser(id);
+  async deleteUser(@Param('id') id: string, @Req() req: any) {
+    const operatorUsername = req.user?.username || 'admin';
+    return this.authService.deleteUser(id, operatorUsername);
   }
 
   @ApiBearerAuth()
@@ -63,7 +66,9 @@ export class AuthController {
   async resetPassword(
     @Param('id') id: string,
     @Body('password') password: string,
+    @Req() req: any,
   ) {
-    return this.authService.resetPassword(id, password);
+    const operatorUsername = req.user?.username || 'admin';
+    return this.authService.resetPassword(id, password, operatorUsername);
   }
 }

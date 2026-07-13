@@ -31,8 +31,9 @@ export class TeamController {
   @Roles('super_admin')
   @Post()
   @ApiOperation({ summary: '创建球队' })
-  create(@Body() createTeamDto: CreateTeamDto) {
-    return this.teamService.create(createTeamDto);
+  create(@Body() createTeamDto: CreateTeamDto, @Req() req: any) {
+    const username = req.user?.username || 'admin';
+    return this.teamService.create(createTeamDto, username);
   }
 
   @Get()
@@ -74,7 +75,8 @@ export class TeamController {
     if (req.user.role === 'coach' && req.user.teamId !== id) {
       throw new ForbiddenException('您没有权限修改其他球队的信息');
     }
-    return this.teamService.update(id, updateTeamDto);
+    const username = req.user?.username || 'admin';
+    return this.teamService.update(id, updateTeamDto, username);
   }
 
   @ApiBearerAuth()
@@ -82,7 +84,8 @@ export class TeamController {
   @Roles('super_admin')
   @Delete(':id')
   @ApiOperation({ summary: '删除球队' })
-  remove(@Param('id') id: string) {
-    return this.teamService.remove(id);
+  remove(@Param('id') id: string, @Req() req: any) {
+    const username = req.user?.username || 'admin';
+    return this.teamService.remove(id, username);
   }
 }

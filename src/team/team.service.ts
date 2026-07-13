@@ -2,16 +2,28 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { UpdateTeamDto } from './dto/update-team.dto';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Injectable()
 export class TeamService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
-  async create(createTeamDto: CreateTeamDto) {
-    return this.prisma.team.create({
+  async create(createTeamDto: CreateTeamDto, username: string = 'admin') {
+    const team = await this.prisma.team.create({
       data: createTeamDto,
       include: { players: { where: { deletedAt: null } } },
     });
+
+    await this.auditLogService.log(
+      username,
+      'CREATE_TEAM',
+      `创建了新球队: "${team.teamName}" (主教练: ${team.headCoach || '无'}, 队长: ${team.teamLeader || '无'})`,
+    );
+
+    return team;
   }
 
   async findAll(page: number = 1, limit: number = 10) {
@@ -42,19 +54,57 @@ export class TeamService {
     return team;
   }
 
-  async update(id: string, updateTeamDto: UpdateTeamDto) {
+  async update(id: string, updateTeamDto: UpdateTeamDto, username: string = 'admin') {
     const team = await this.prisma.team.findUnique({ where: { id } });
     if (!team || team.deletedAt !== null) {
       throw new NotFoundException('球队不存在');
     }
-    return this.prisma.team.update({
+
+    const updatedTeam = await this.prisma.team.update({
       where: { id },
       data: updateTeamDto,
       include: { players: { where: { deletedAt: null } } },
     });
+
+    const diffs: string[] = [];
+    if (updateTeamDto.teamName !== undefined && updateTeamDto.teamName !== team.teamName) {
+      diffs.push(`队名: "${team.teamName}" -> "${updateTeamDto.teamName}"`);
+    }
+    if (updateTeamDto.teamLogo !== undefined && updateTeamDto.teamLogo !== team.teamLogo) {
+      diffs.push(`队徽已更新`);
+    }
+    if (updateTeamDto.headCoach !== undefined && updateTeamDto.headCoach !== team.headCoach) {
+      diffs.push(`主教练: "${team.headCoach || '无'}" -> "${updateTeamDto.headCoach || '无'}"`);
+    }
+    if (updateTeamDto.coachPhone !== undefined && updateTeamDto.coachPhone !== team.coachPhone) {
+      diffs.push(`教练电话: "${team.coachPhone || '无'}" -> "${updateTeamDto.coachPhone || '无'}"`);
+    }
+    if (updateTeamDto.teamLeader !== undefined && updateTeamDto.teamLeader !== team.teamLeader) {
+      diffs.push(`队长: "${team.teamLeader || '无'}" -> "${updateTeamDto.teamLeader || '无'}"`);
+    }
+    if (updateTeamDto.leaderPhone !== undefined && updateTeamDto.leaderPhone !== team.leaderPhone) {
+      diffs.push(`队长电话: "${team.leaderPhone || '无'}" -> "${updateTeamDto.leaderPhone || '无'}"`);
+    }
+    if (updateTeamDto.teamDoctor !== undefined && updateTeamDto.teamDoctor !== team.teamDoctor) {
+      diffs.push(`队医: "${team.teamDoctor || '无'}" -> "${updateTeamDto.teamDoctor || '无'}"`);
+    }
+    if (updateTeamDto.homeJerseyColor !== undefined && updateTeamDto.homeJerseyColor !== team.homeJerseyColor) {
+      diffs.push(`主场球衣: "${team.homeJerseyColor || '无'}" -> "${updateTeamDto.homeJerseyColor || '无'}"`);
+    }
+    if (updateTeamDto.awayJerseyColor !== undefined && updateTeamDto.awayJerseyColor !== team.awayJerseyColor) {
+      diffs.push(`客场球衣: "${team.awayJerseyColor || '无'}" -> "${updateTeamDto.awayJerseyColor || '无'}"`);
+    }
+
+    const details = diffs.length > 0
+      ? `修改了球队 "${team.teamName}" 的信息: ${diffs.join(', ')}`
+      : `保存了球队 "${team.teamName}" 的信息(未做改动)`;
+
+    await this.auditLogService.log(username, 'UPDATE_TEAM', details);
+
+    return updatedTeam;
   }
 
-  async remove(id: string) {
+  async remove(id: string, username: string = 'admin') {
     const team = await this.prisma.team.findUnique({ where: { id } });
     if (!team || team.deletedAt !== null) {
       throw new NotFoundException('球队不存在');
@@ -78,13 +128,21 @@ export class TeamService {
     }
 
     // 2. 软删除该球队并释放唯一队名约束
-    return this.prisma.team.update({
+    const deletedTeam = await this.prisma.team.update({
       where: { id },
       data: {
         deletedAt: new Date(),
         teamName: `${team.teamName}_deleted_${timestamp}`
       }
     });
+
+    await this.auditLogService.log(
+      username,
+      'DELETE_TEAM',
+      `删除了球队 "${team.teamName}"，并级联软删除了该队名下的 ${teamPlayers.length} 名在队球员。`,
+    );
+
+    return deletedTeam;
   }
 
   async searchByName(name: string) {

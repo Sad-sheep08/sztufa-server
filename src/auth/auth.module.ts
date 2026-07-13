@@ -5,9 +5,11 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtStrategy } from './jwt.strategy';
+import { AuditLogModule } from '../audit-log/audit-log.module';
 
 @Module({
   imports: [
+    AuditLogModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
