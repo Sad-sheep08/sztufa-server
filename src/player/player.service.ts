@@ -307,7 +307,7 @@ export class PlayerService {
           stats.goals += 1;
         } else if (event.eventType === 'yellow_card') {
           stats.yellowCards += 1;
-        } else if (event.eventType === 'red_card') {
+        } else if (event.eventType === 'red_card' || event.eventType === 'yellow_to_red') {
           stats.redCards += 1;
         }
       }

@@ -465,7 +465,7 @@ export class MatchService {
     const events = await tx.matchEvent.findMany({
       where: {
         playerId,
-        eventType: { in: ['yellow_card', 'red_card'] },
+        eventType: { in: ['yellow_card', 'red_card', 'yellow_to_red'] },
         match: {
           ...seasonWhere,
           status: { in: ['finished', 'ongoing'] },
@@ -478,7 +478,7 @@ export class MatchService {
     });
 
     const yellowEvents = events.filter((e) => e.eventType === 'yellow_card');
-    const redEvents = events.filter((e) => e.eventType === 'red_card');
+    const redEvents = events.filter((e) => e.eventType === 'red_card' || e.eventType === 'yellow_to_red');
     const yellows = yellowEvents.length;
     const reds = redEvents.length;
 

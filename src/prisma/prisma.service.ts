@@ -230,7 +230,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         match.events.forEach(event => {
           const teamInfo = getPlayerTeamInfo(event.playerId, event.playerName || '', event.jerseyNumber || '', event.teamType, match);
           
-          if (event.eventType === 'yellow_card' || event.eventType === 'red_card') {
+          if (event.eventType === 'yellow_card' || event.eventType === 'red_card' || event.eventType === 'yellow_to_red') {
             const key = event.playerId || `${teamInfo.name}_${teamInfo.jersey}`;
             const record = playerCards.get(key) || {
               playerId: event.playerId || '',
@@ -242,7 +242,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
               redCards: 0
             };
             if (event.eventType === 'yellow_card') record.yellowCards += 1;
-            if (event.eventType === 'red_card') record.redCards += 1;
+            if (event.eventType === 'red_card' || event.eventType === 'yellow_to_red') record.redCards += 1;
             playerCards.set(key, record);
           }
 
