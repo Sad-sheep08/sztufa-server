@@ -25,19 +25,21 @@ export class PlayerService {
       throw new NotFoundException('球队不存在');
     }
 
-    // 检查学号是否已存在且未被删除
+    // 检查学号是否已存在
     const existingPlayer = await this.prisma.player.findUnique({
       where: { studentId: createPlayerDto.studentId },
     });
 
-    if (existingPlayer && existingPlayer.deletedAt === null) {
-      if (userCtx && userCtx.role === 'coach') {
-        if (existingPlayer.teamId !== userCtx.teamId) {
-          throw new ForbiddenException('该学号的球员已归属于其他球队，您没有权限修改其信息或将其划归至本队');
+    if (existingPlayer) {
+      if (existingPlayer.deletedAt === null) {
+        if (userCtx && userCtx.role === 'coach') {
+          if (existingPlayer.teamId !== userCtx.teamId) {
+            throw new ForbiddenException('该学号的球员已归属于其他球队，您没有权限修改其信息或将其划归至本队');
+          }
         }
       }
 
-      // 如果已存在，则更新球员信息
+      // 如果已存在，则更新/恢复球员信息
       const updatedPlayer = await this.prisma.player.update({
         where: { studentId: createPlayerDto.studentId },
         data: {
@@ -45,6 +47,7 @@ export class PlayerService {
           jerseyNumber: createPlayerDto.jerseyNumber,
           teamId: createPlayerDto.teamId,
           photo: createPlayerDto.photo || existingPlayer.photo || undefined,
+          deletedAt: null, // 恢复软删除的球员
         },
         include: { team: true },
       });
