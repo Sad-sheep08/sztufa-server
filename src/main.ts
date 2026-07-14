@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { PrismaClientExceptionFilter } from './prisma/prisma-client-exception.filter';
 import express from 'express';
 
 const server = express();
@@ -16,6 +17,8 @@ async function createApp() {
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server), {
     logger: ['error', 'warn', 'log'],
   });
+
+  app.useGlobalFilters(new PrismaClientExceptionFilter());
 
   app.useGlobalPipes(
     new ValidationPipe({

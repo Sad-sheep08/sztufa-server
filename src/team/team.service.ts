@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { UpdateTeamDto } from './dto/update-team.dto';
@@ -12,6 +12,13 @@ export class TeamService {
   ) {}
 
   async create(createTeamDto: CreateTeamDto, username: string = 'admin') {
+    const existingTeam = await this.prisma.team.findFirst({
+      where: { teamName: createTeamDto.teamName, deletedAt: null },
+    });
+    if (existingTeam) {
+      throw new ConflictException('该球队名称已存在，请使用其他名称');
+    }
+
     const team = await this.prisma.team.create({
       data: createTeamDto,
       include: { players: { where: { deletedAt: null } } },
@@ -58,6 +65,15 @@ export class TeamService {
     const team = await this.prisma.team.findUnique({ where: { id } });
     if (!team || team.deletedAt !== null) {
       throw new NotFoundException('球队不存在');
+    }
+
+    if (updateTeamDto.teamName && updateTeamDto.teamName !== team.teamName) {
+      const existingTeam = await this.prisma.team.findFirst({
+        where: { teamName: updateTeamDto.teamName, deletedAt: null },
+      });
+      if (existingTeam) {
+        throw new ConflictException('该球队名称已存在，请使用其他名称');
+      }
     }
 
     const updatedTeam = await this.prisma.team.update({

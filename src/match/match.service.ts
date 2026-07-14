@@ -186,7 +186,7 @@ export class MatchService {
       where.OR = [{ homeTeamId: teamId }, { awayTeamId: teamId }];
     }
 
-    const [data, total] = await Promise.all([
+    const [data, total, allMatchesForStats] = await Promise.all([
       this.prisma.match.findMany({
         skip,
         take: limitNum,
@@ -195,9 +195,20 @@ export class MatchService {
         orderBy: { matchDate: 'desc' },
       }),
       this.prisma.match.count({ where }),
+      this.prisma.match.findMany({
+        where,
+        select: { status: true }
+      }),
     ]);
 
-    return { data, total, page: pageNum, limit: limitNum };
+    const stats = {
+      total: allMatchesForStats.length,
+      completed: allMatchesForStats.filter(m => m.status === 'finished').length,
+      scheduled: allMatchesForStats.filter(m => m.status === 'scheduled').length,
+      ongoing: allMatchesForStats.filter(m => m.status === 'ongoing').length,
+    };
+
+    return { data, total, page: pageNum, limit: limitNum, stats };
   }
 
   async findOne(id: string) {
