@@ -59,7 +59,8 @@ export class AuditLogService {
           createdAt: group.createdAt,
           username: group.username,
           action: group.action,
-          details: group.details
+          details: group.details,
+          subLogs: []
         };
       }
 
@@ -111,7 +112,12 @@ export class AuditLogService {
         createdAt: group.createdAt,
         username: group.username,
         action: group.action,
-        details
+        details,
+        subLogs: group.items.map(item => ({
+          id: item.id,
+          createdAt: item.createdAt,
+          details: item.details
+        }))
       };
     });
   }
