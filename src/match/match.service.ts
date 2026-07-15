@@ -168,7 +168,7 @@ export class MatchService {
     return result;
   }
 
-  async findAll(page: number = 1, limit: number = 10, teamId?: string, seasonId?: string) {
+  async findAll(page: number = 1, limit: number = 10, teamId?: string, seasonId?: string, status?: string) {
     const pageNum = Math.max(1, Number(page) || 1);
     const limitNum = Math.max(1, Math.min(100, Number(limit) || 10));
     const skip = (pageNum - 1) * limitNum;
@@ -183,10 +183,12 @@ export class MatchService {
       }
     }
 
-    console.log('[MatchService.findAll] targetSeasonId received:', targetSeasonId);
     const where: any = { deletedAt: null };
     if (targetSeasonId && targetSeasonId !== 'all') {
       where.seasonId = targetSeasonId;
+    }
+    if (status && status !== 'all') {
+      where.status = status;
     }
     if (teamId) {
       where.OR = [{ homeTeamId: teamId }, { awayTeamId: teamId }];

@@ -42,8 +42,9 @@ export class MatchController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('teamId') teamId?: string,
     @Query('seasonId') seasonId?: string,
+    @Query('status') status?: string,
   ) {
-    return this.matchService.findAll(page, limit, teamId, seasonId);
+    return this.matchService.findAll(page, limit, teamId, seasonId, status);
   }
 
   @Get(':id')
