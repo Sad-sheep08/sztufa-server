@@ -82,6 +82,16 @@ export class TeamService {
       include: { players: { where: { deletedAt: null } } },
     });
 
+    // 重新计算并缓存该球队所涉及的所有赛季的数据，以更新前台积分榜、射手榜、助攻榜的队徽
+    try {
+      const seasons = await this.prisma.season.findMany();
+      for (const season of seasons) {
+        await this.prisma.computeAndCacheSeasonStats(season.id);
+      }
+    } catch (cacheErr) {
+      console.error('更新球队队徽后重建积分榜统计缓存失败:', cacheErr);
+    }
+
     const diffs: string[] = [];
     if (updateTeamDto.teamName !== undefined && updateTeamDto.teamName !== team.teamName) {
       diffs.push(`队名: ${team.teamName}->${updateTeamDto.teamName}`);
