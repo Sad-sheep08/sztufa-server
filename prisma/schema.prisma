@@ -142,18 +142,23 @@ model News {
   id           String   @id @default(cuid())
   title        String
   category     String
-  content      String
+  content      String   @default("")
+  description  String   @default("")
   coverImage   String?
+  wechatUrl    String?
   isPinned     Boolean  @default(false)
   viewCount    Int      @default(0)
   published    Boolean  @default(true)
   publishedAt  DateTime @default(now())
+  date         String   @default("") // 格式如 "2026-06-10"
+  deletedAt    DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([category])
   @@index([published])
   @@index([publishedAt])
+  @@index([deletedAt])
 }
 
 
