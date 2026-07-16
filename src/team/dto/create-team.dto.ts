@@ -1,9 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, MaxLength } from 'class-validator';
 
 export class CreateTeamDto {
   @ApiProperty({ description: '球队名称', example: '人工智能学院' })
   @IsString()
+  @MaxLength(100, { message: '球队名称长度不能超过100个字符' })
   teamName: string;
 
   @ApiProperty({ description: '队医', example: '张正扬', required: false })
