@@ -7,6 +7,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import multer from 'multer';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { UploadService } from './upload.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -34,6 +35,7 @@ export class UploadController {
   })
   @UseInterceptors(
     FileInterceptor('file', {
+      storage: multer.memoryStorage(),
       limits: {
         fileSize: 5 * 1024 * 1024, // 限制文件大小最大为 5MB
       },
