@@ -94,6 +94,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async computeAndCacheSeasonStats(seasonId: string) {
     try {
+      const season = await this.season.findUnique({
+        where: { id: seasonId }
+      });
+      if (!season) return;
+      const seasonType = season.type || 'LEAGUE';
+
       // 1. 获取该赛季所有未被删除且已完赛的比赛
       const matches = await this.match.findMany({
         where: {
@@ -151,60 +157,170 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         }
       });
 
-      // 初始化积分榜 Map
-      const standingsMap = new Map<string, any>();
-      teamsMap.forEach(team => {
-        standingsMap.set(team.id, {
-          teamId: team.id,
-          teamName: team.teamName,
-          teamLogo: team.teamLogo,
-          played: 0,
-          won: 0,
-          drawn: 0,
-          lost: 0,
-          goalsFor: 0,
-          goalsAgainst: 0,
-          goalDifference: 0,
-          points: 0
+      let standings: any = [];
+
+      if (seasonType === 'CUP') {
+        // 3.1 杯赛模式：分小组计算积分榜
+        const groupTeams = await this.seasonGroupTeam.findMany({
+          where: { seasonId },
+          include: { team: true }
         });
-      });
 
-      // 计算积分榜
-      matches.forEach(match => {
-        const home = standingsMap.get(match.homeTeamId);
-        const away = standingsMap.get(match.awayTeamId);
-        if (home && away) {
-          home.played += 1;
-          away.played += 1;
-          home.goalsFor += match.homeScore;
-          home.goalsAgainst += match.awayScore;
-          away.goalsFor += match.awayScore;
-          away.goalsAgainst += match.homeScore;
+        const groupsMap = new Map<string, Map<string, any>>();
 
-          if (match.homeScore > match.awayScore) {
-            home.won += 1;
-            home.points += 3;
-            away.lost += 1;
-          } else if (match.homeScore < match.awayScore) {
-            away.won += 1;
-            away.points += 3;
-            home.lost += 1;
-          } else {
-            home.drawn += 1;
-            home.points += 1;
-            away.drawn += 1;
-            away.points += 1;
+        // 按照 groupTeams 分组注册球队
+        groupTeams.forEach(gt => {
+          if (!groupsMap.has(gt.groupName)) {
+            groupsMap.set(gt.groupName, new Map<string, any>());
           }
-          home.goalDifference = home.goalsFor - home.goalsAgainst;
-          away.goalDifference = away.goalsFor - away.goalsAgainst;
-        }
-      });
+          const groupStandings = groupsMap.get(gt.groupName)!;
+          groupStandings.set(gt.teamId, {
+            teamId: gt.teamId,
+            teamName: gt.team.teamName,
+            teamLogo: gt.team.teamLogo || '',
+            played: 0,
+            won: 0,
+            drawn: 0,
+            lost: 0,
+            goalsFor: 0,
+            goalsAgainst: 0,
+            goalDifference: 0,
+            points: 0
+          });
+        });
 
-      const standings = Array.from(standingsMap.values()).sort((a, b) => {
-        if (b.points !== a.points) return b.points - a.points;
-        if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
-        return b.goalsFor - a.goalsFor;
-      });
+        // 筛选小组赛阶段且完赛的比赛进行计算
+        const groupMatches = matches.filter(m => m.stage === 'GROUP');
+        groupMatches.forEach(match => {
+          const gName = match.groupName || 'A';
+          if (!groupsMap.has(gName)) {
+            groupsMap.set(gName, new Map<string, any>());
+          }
+          const groupStandings = groupsMap.get(gName)!;
+
+          const ensureTeamInGroup = (teamId: string) => {
+            if (!groupStandings.has(teamId)) {
+              const teamInfo = dbTeamsMap.get(teamId);
+              groupStandings.set(teamId, {
+                teamId: teamId,
+                teamName: teamInfo?.teamName || '未知球队',
+                teamLogo: teamInfo?.teamLogo || '',
+                played: 0,
+                won: 0,
+                drawn: 0,
+                lost: 0,
+                goalsFor: 0,
+                goalsAgainst: 0,
+                goalDifference: 0,
+                points: 0
+              });
+            }
+          };
+
+          ensureTeamInGroup(match.homeTeamId);
+          ensureTeamInGroup(match.awayTeamId);
+
+          const home = groupStandings.get(match.homeTeamId);
+          const away = groupStandings.get(match.awayTeamId);
+
+          if (home && away) {
+            home.played += 1;
+            away.played += 1;
+            home.goalsFor += match.homeScore;
+            home.goalsAgainst += match.awayScore;
+            away.goalsFor += match.awayScore;
+            away.goalsAgainst += match.homeScore;
+
+            if (match.homeScore > match.awayScore) {
+              home.won += 1;
+              home.points += 3;
+              away.lost += 1;
+            } else if (match.homeScore < match.awayScore) {
+              away.won += 1;
+              away.points += 3;
+              home.lost += 1;
+            } else {
+              home.drawn += 1;
+              home.points += 1;
+              away.drawn += 1;
+              away.points += 1;
+            }
+            home.goalDifference = home.goalsFor - home.goalsAgainst;
+            away.goalDifference = away.goalsFor - away.goalsAgainst;
+          }
+        });
+
+        const groupsStandings: Record<string, any[]> = {};
+        groupsMap.forEach((standingMap, gName) => {
+          groupsStandings[gName] = Array.from(standingMap.values()).sort((a, b) => {
+            if (b.points !== a.points) return b.points - a.points;
+            if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+            return b.goalsFor - a.goalsFor;
+          });
+        });
+
+        standings = {
+          type: 'CUP',
+          groups: groupsStandings
+        };
+
+      } else {
+        // 3.2 联赛模式：原有的单积分榜逻辑
+        const standingsMap = new Map<string, any>();
+        teamsMap.forEach(team => {
+          standingsMap.set(team.id, {
+            teamId: team.id,
+            teamName: team.teamName,
+            teamLogo: team.teamLogo,
+            played: 0,
+            won: 0,
+            drawn: 0,
+            lost: 0,
+            goalsFor: 0,
+            goalsAgainst: 0,
+            goalDifference: 0,
+            points: 0
+          });
+        });
+
+        // 筛选联赛阶段的比赛
+        const leagueMatches = matches.filter(m => m.stage === 'LEAGUE' || !m.stage);
+        leagueMatches.forEach(match => {
+          const home = standingsMap.get(match.homeTeamId);
+          const away = standingsMap.get(match.awayTeamId);
+          if (home && away) {
+            home.played += 1;
+            away.played += 1;
+            home.goalsFor += match.homeScore;
+            home.goalsAgainst += match.awayScore;
+            away.goalsFor += match.awayScore;
+            away.goalsAgainst += match.homeScore;
+
+            if (match.homeScore > match.awayScore) {
+              home.won += 1;
+              home.points += 3;
+              away.lost += 1;
+            } else if (match.homeScore < match.awayScore) {
+              away.won += 1;
+              away.points += 3;
+              home.lost += 1;
+            } else {
+              home.drawn += 1;
+              home.points += 1;
+              away.drawn += 1;
+              away.points += 1;
+            }
+            home.goalDifference = home.goalsFor - home.goalsAgainst;
+            away.goalDifference = away.goalsFor - away.goalsAgainst;
+          }
+        });
+
+        standings = Array.from(standingsMap.values()).sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points;
+          if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+          return b.goalsFor - a.goalsFor;
+        });
+      }
 
       // 3. 计算球员数据榜 (进球/助攻/黄红牌)
       const playerScorers = new Map<string, any>();

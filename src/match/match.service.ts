@@ -29,12 +29,16 @@ export class MatchService {
     }
 
     // 获取当前活跃赛季并进行关联
-    const activeSeason = await this.prisma.season.findFirst({
-      where: { status: 'active' },
-    });
-    const seasonId = activeSeason ? activeSeason.id : null;
+    let seasonId = createMatchDto.seasonId;
+    if (!seasonId) {
+      const activeSeason = await this.prisma.season.findFirst({
+        where: { status: 'active' },
+        orderBy: { createdAt: 'desc' },
+      });
+      seasonId = activeSeason ? activeSeason.id : undefined;
+    }
 
-    const { goals, events, lineups, ...matchData } = createMatchDto;
+    const { goals, events, lineups, seasonId: passedSeasonId, ...matchData } = createMatchDto;
 
     const { match, validLineups } = await this.prisma.$transaction(async (tx) => {
       const createdMatch = await tx.match.create({
@@ -172,7 +176,16 @@ export class MatchService {
     return result;
   }
 
-  async findAll(page: number = 1, limit: number = 10, teamId?: string, seasonId?: string, status?: string) {
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+    teamId?: string,
+    seasonId?: string,
+    status?: string,
+    stage?: string,
+    groupName?: string,
+    knockoutRound?: string
+  ) {
     const pageNum = Math.max(1, Number(page) || 1);
     const limitNum = Math.max(1, Math.min(100, Number(limit) || 10));
     const skip = (pageNum - 1) * limitNum;
@@ -196,6 +209,15 @@ export class MatchService {
     }
     if (teamId) {
       where.OR = [{ homeTeamId: teamId }, { awayTeamId: teamId }];
+    }
+    if (stage) {
+      where.stage = stage;
+    }
+    if (groupName) {
+      where.groupName = groupName;
+    }
+    if (knockoutRound) {
+      where.knockoutRound = knockoutRound;
     }
 
     const whereStats = { ...where };

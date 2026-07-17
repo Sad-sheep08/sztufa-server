@@ -43,8 +43,11 @@ export class MatchController {
     @Query('teamId') teamId?: string,
     @Query('seasonId') seasonId?: string,
     @Query('status') status?: string,
+    @Query('stage') stage?: string,
+    @Query('groupName') groupName?: string,
+    @Query('knockoutRound') knockoutRound?: string,
   ) {
-    return this.matchService.findAll(page, limit, teamId, seasonId, status);
+    return this.matchService.findAll(page, limit, teamId, seasonId, status, stage, groupName, knockoutRound);
   }
 
   @Get(':id')

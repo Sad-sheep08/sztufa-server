@@ -26,6 +26,7 @@ model Team {
   users           User[]
   deletedAt       DateTime?
   seasonPlayers   SeasonTeamPlayer[]
+  groupTeams      SeasonGroupTeam[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -81,6 +82,10 @@ model Match {
   mvpPlayer       Player?       @relation("MatchMvpPlayer", fields: [mvpPlayerId], references: [id])
   mvpPlayerName   String?
   lineups         MatchLineup[]
+  stage           String        @default("LEAGUE") // LEAGUE, GROUP, KNOCKOUT
+  groupName       String?
+  knockoutRound   String?
+  knockoutMatchIndex Int?
   deletedAt       DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -89,6 +94,7 @@ model Match {
   @@index([awayTeamId])
   @@index([matchDate])
   @@index([seasonId, deletedAt])
+  @@index([seasonId, stage, deletedAt])
   @@index([mvpPlayerId])
   @@index([deletedAt])
 }
@@ -191,10 +197,12 @@ model Season {
   id             String   @id @default(cuid())
   name           String   @unique
   status         String   @default("active") // active, archived
+  type           String   @default("LEAGUE") // LEAGUE, CUP
   matches        Match[]
   standingsCache Json?
   statsCache     Json?
   teamPlayers    SeasonTeamPlayer[]
+  groupTeams     SeasonGroupTeam[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -227,4 +235,18 @@ model MatchLineup {
   @@unique([matchId, playerId])
   @@index([matchId])
   @@index([playerId])
+}
+
+model SeasonGroupTeam {
+  id        String   @id @default(cuid())
+  seasonId  String
+  teamId    String
+  groupName String   // e.g. "A", "B", "C", "D"
+  season    Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([seasonId, teamId])
+  @@index([seasonId])
+  @@index([teamId])
 }

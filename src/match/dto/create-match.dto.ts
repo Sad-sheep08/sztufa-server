@@ -54,6 +54,31 @@ export class CreateMatchDto {
   @IsString()
   mvpPlayerName?: string;
 
+  @ApiProperty({ description: '赛季ID', required: false })
+  @IsOptional()
+  @IsString()
+  seasonId?: string;
+
+  @ApiProperty({ description: '比赛阶段', example: 'LEAGUE', required: false })
+  @IsOptional()
+  @IsString()
+  stage?: string;
+
+  @ApiProperty({ description: '小组名称', example: 'A', required: false })
+  @IsOptional()
+  @IsString()
+  groupName?: string;
+
+  @ApiProperty({ description: '淘汰赛轮次', example: 'R16', required: false })
+  @IsOptional()
+  @IsString()
+  knockoutRound?: string;
+
+  @ApiProperty({ description: '淘汰赛序号', example: 1, required: false })
+  @IsOptional()
+  @IsInt()
+  knockoutMatchIndex?: number;
+
   @ApiProperty({ description: '比赛阵容列表', required: false, type: 'array' })
   @IsOptional()
   @IsArray()

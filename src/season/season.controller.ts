@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Request, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Request, Param, Patch } from '@nestjs/common';
 import { SeasonService } from './season.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -28,11 +28,59 @@ export class SeasonController {
     return this.seasonService.getSeasonStats(id);
   }
 
+  @Get(':id/groups')
+  async getSeasonGroups(@Param('id') id: string) {
+    return this.seasonService.getSeasonGroups(id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post(':id/groups')
+  async updateSeasonGroups(
+    @Param('id') id: string,
+    @Body('groups') groups: { teamId: string; groupName: string }[],
+    @Request() req: any
+  ) {
+    const username = req.user?.username || 'admin';
+    return this.seasonService.updateSeasonGroups(id, groups, username);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post(':id/generate-knockout')
+  async generateKnockoutMatches(
+    @Param('id') id: string,
+    @Request() req: any
+  ) {
+    const username = req.user?.username || 'admin';
+    return this.seasonService.generateKnockoutMatches(id, username);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Post()
+  async createSeason(@Body('name') name: string, @Body('type') type: string, @Request() req: any) {
+    const username = req.user?.username || 'admin';
+    return this.seasonService.createSeason(name, type, username);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Patch(':id/status')
+  async updateSeasonStatus(
+    @Param('id') id: string,
+    @Body('status') status: string,
+    @Request() req: any
+  ) {
+    const username = req.user?.username || 'admin';
+    return this.seasonService.updateSeasonStatus(id, status, username);
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   @Post('archive')
-  async archiveSeason(@Body('name') name: string, @Request() req: any) {
+  async archiveSeason(@Body('name') name: string, @Body('type') type: string, @Request() req: any) {
     const username = req.user?.username || 'admin';
-    return this.seasonService.archiveAndCreateNewSeason(name, username);
+    return this.seasonService.archiveAndCreateNewSeason(name, type, username);
   }
 }
