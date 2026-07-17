@@ -3,12 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { PlayerCardSyncService } from './player-card-sync.service';
 
 @Injectable()
 export class MatchService {
   constructor(
     private prisma: PrismaService,
     private readonly auditLogService: AuditLogService,
+    private readonly playerCardSyncService: PlayerCardSyncService,
   ) {}
 
   async create(createMatchDto: CreateMatchDto, username: string) {
@@ -148,7 +150,7 @@ export class MatchService {
     });
 
     // 同步本场比赛受影响和停赛球员的红黄牌与可用状态
-    await this.syncMatchPlayers(
+    await this.playerCardSyncService.syncMatchPlayers(
       match.id,
       match.homeTeamId,
       match.awayTeamId,
@@ -409,7 +411,7 @@ export class MatchService {
     }
 
     // 重新计算并同步所有受影响球员和需解禁停赛球员的状态
-    await this.syncMatchPlayers(
+    await this.playerCardSyncService.syncMatchPlayers(
       id,
       updatedMatch.homeTeamId,
       updatedMatch.awayTeamId,
@@ -498,7 +500,7 @@ export class MatchService {
 
     // 同步受影响球员的状态
     for (const playerId of affectedPlayerIds) {
-      await this.syncPlayerCards(playerId, this.prisma);
+      await this.playerCardSyncService.syncPlayerCards(playerId, this.prisma);
     }
 
     if (deletedMatch.seasonId) {
@@ -514,115 +516,4 @@ export class MatchService {
     return deletedMatch;
   }
 
-  async syncMatchPlayers(
-    matchId: string,
-    homeTeamId: string,
-    awayTeamId: string,
-    status: string,
-    events: any[],
-    tx: any = this.prisma,
-  ) {
-    const affectedPlayerIds = new Set<string>();
-    events.forEach((e) => {
-      if (e.playerId) affectedPlayerIds.add(e.playerId);
-      if (e.subPlayerId) affectedPlayerIds.add(e.subPlayerId);
-      if (e.assistPlayerId) affectedPlayerIds.add(e.assistPlayerId);
-    });
-
-    if (status === 'finished') {
-      const suspendedPlayers = await tx.player.findMany({
-        where: {
-          teamId: { in: [homeTeamId, awayTeamId] },
-          status: 'suspended',
-        },
-      });
-      suspendedPlayers.forEach((p) => affectedPlayerIds.add(p.id));
-    }
-
-    for (const playerId of affectedPlayerIds) {
-      await this.syncPlayerCards(playerId, tx);
-    }
-  }
-
-  async syncPlayerCards(playerId: string, tx: any = this.prisma) {
-    const activeSeason = await tx.season.findFirst({
-      where: { status: 'active' },
-    });
-    const seasonWhere = activeSeason ? { seasonId: activeSeason.id } : {};
-
-    const events = await tx.matchEvent.findMany({
-      where: {
-        playerId,
-        eventType: { in: ['yellow_card', 'red_card', 'yellow_to_red'] },
-        match: {
-          ...seasonWhere,
-          status: { in: ['finished', 'ongoing'] },
-          deletedAt: null,
-        },
-      },
-      include: {
-        match: true,
-      },
-      orderBy: [{ match: { matchDate: 'asc' } }, { eventTime: 'asc' }],
-    });
-
-    const yellowEvents = events.filter((e) => e.eventType === 'yellow_card');
-    const redEvents = events.filter((e) => e.eventType === 'red_card' || e.eventType === 'yellow_to_red');
-    const yellows = yellowEvents.length;
-    const reds = redEvents.length;
-
-    const triggerMatches: any[] = [];
-    redEvents.forEach((e) => {
-      if (e.match) triggerMatches.push(e.match);
-    });
-    yellowEvents.forEach((e, index) => {
-      if ((index + 1) % 3 === 0 && e.match) {
-        triggerMatches.push(e.match);
-      }
-    });
-
-    let status = 'active';
-    let suspendedAtMatchId: string | null = null;
-
-    if (triggerMatches.length > 0) {
-      triggerMatches.sort(
-        (a, b) => new Date(b.matchDate).getTime() - new Date(a.matchDate).getTime(),
-      );
-      const latestTriggerMatch = triggerMatches[0];
-
-      const player = await tx.player.findUnique({
-        where: { id: playerId },
-      });
-      if (player) {
-        const servedMatch = await tx.match.findFirst({
-          where: {
-            ...seasonWhere,
-            status: 'finished',
-            matchDate: { gt: latestTriggerMatch.matchDate },
-            OR: [{ homeTeamId: player.teamId }, { awayTeamId: player.teamId }],
-            deletedAt: null,
-          },
-          orderBy: { matchDate: 'asc' },
-        });
-
-        if (servedMatch) {
-          status = 'active';
-          suspendedAtMatchId = null;
-        } else {
-          status = 'suspended';
-          suspendedAtMatchId = latestTriggerMatch.id;
-        }
-      }
-    }
-
-    await tx.player.update({
-      where: { id: playerId },
-      data: {
-        yellowCards: yellows,
-        redCards: reds,
-        status,
-        suspendedAtMatchId,
-      },
-    });
-  }
 }

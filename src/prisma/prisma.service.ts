@@ -6,7 +6,20 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   private static isMigrated = false;
 
   async onModuleInit() {
-    await this.$connect();
+    let retries = 5;
+    while (retries > 0) {
+      try {
+        await this.$connect();
+        break;
+      } catch (err: any) {
+        retries--;
+        console.warn(`[PrismaService] 数据库连接失败，正在重试... (剩余 ${retries} 次尝试)。错误: ${err.message || String(err)}`);
+        if (retries === 0) {
+          throw err;
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
     await this.runStartupMigrations();
   }
 
@@ -100,6 +113,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       if (!season) return;
       const seasonType = season.type || 'LEAGUE';
 
+      // 推断赛季性别：名称含"女"→ FEMALE，否则 → MALE
+      const seasonGender = (season.name.includes('女') || season.name.includes('女子')) ? 'FEMALE' : 'MALE';
+
       // 1. 获取该赛季所有未被删除且已完赛的比赛
       const matches = await this.match.findMany({
         where: {
@@ -121,7 +137,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
       const teamsMap = new Map<string, { id: string; teamName: string; teamLogo: string }>();
       seasonPlayers.forEach(sp => {
-        if (sp.team && !teamsMap.has(sp.teamId)) {
+        // 按赛季性别过滤球队，只保留同性别球队
+        if (sp.team && !teamsMap.has(sp.teamId) && sp.team.gender === seasonGender) {
           teamsMap.set(sp.teamId, {
             id: sp.teamId,
             teamName: sp.team.teamName,
@@ -130,31 +147,25 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         }
       });
 
-      // 从比赛里进行补充解析以保全数据
+      // 从比赛里进行补充解析以保全数据（同样过滤性别）
       const allTeams = await this.team.findMany();
       const dbTeamsMap = new Map(allTeams.map(t => [t.id, t]));
 
       matches.forEach(m => {
-        if (!teamsMap.has(m.homeTeamId)) {
-          const t = dbTeamsMap.get(m.homeTeamId);
-          if (t) {
-            teamsMap.set(m.homeTeamId, {
-              id: t.id,
-              teamName: t.teamName,
-              teamLogo: t.teamLogo || ''
-            });
+        const addTeamIfValid = (teamId: string) => {
+          if (!teamsMap.has(teamId)) {
+            const t = dbTeamsMap.get(teamId);
+            if (t && t.gender === seasonGender) {
+              teamsMap.set(teamId, {
+                id: t.id,
+                teamName: t.teamName,
+                teamLogo: t.teamLogo || ''
+              });
+            }
           }
-        }
-        if (!teamsMap.has(m.awayTeamId)) {
-          const t = dbTeamsMap.get(m.awayTeamId);
-          if (t) {
-            teamsMap.set(m.awayTeamId, {
-              id: t.id,
-              teamName: t.teamName,
-              teamLogo: t.teamLogo || ''
-            });
-          }
-        }
+        };
+        addTeamIfValid(m.homeTeamId);
+        addTeamIfValid(m.awayTeamId);
       });
 
       let standings: any = [];
@@ -168,8 +179,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
         const groupsMap = new Map<string, Map<string, any>>();
 
-        // 按照 groupTeams 分组注册球队
+        // 按照 groupTeams 分组注册球队（过滤性别）
         groupTeams.forEach(gt => {
+          if (!gt.team || gt.team.gender !== seasonGender) return;
           if (!groupsMap.has(gt.groupName)) {
             groupsMap.set(gt.groupName, new Map<string, any>());
           }
@@ -201,6 +213,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
           const ensureTeamInGroup = (teamId: string) => {
             if (!groupStandings.has(teamId)) {
               const teamInfo = dbTeamsMap.get(teamId);
+              // 只补充同性别球队
+              if (!teamInfo || teamInfo.gender !== seasonGender) return;
               groupStandings.set(teamId, {
                 teamId: teamId,
                 teamName: teamInfo?.teamName || '未知球队',
