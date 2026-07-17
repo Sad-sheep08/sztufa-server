@@ -42,7 +42,7 @@ export class TeamService {
         skip,
         take: limitNum,
         where: { deletedAt: null },
-        include: { players: { where: { deletedAt: null } } },
+        include: { players: { where: { deletedAt: null } }, groupTeams: true },
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.team.count({ where: { deletedAt: null } }),
@@ -53,7 +53,7 @@ export class TeamService {
   async findOne(id: string) {
     const team = await this.prisma.team.findUnique({
       where: { id },
-      include: { players: { where: { deletedAt: null } } },
+      include: { players: { where: { deletedAt: null } }, groupTeams: true },
     });
     if (!team || team.deletedAt !== null) {
       throw new NotFoundException('球队不存在');

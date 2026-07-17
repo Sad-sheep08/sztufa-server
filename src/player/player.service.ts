@@ -59,18 +59,18 @@ export class PlayerService {
         include: { team: true },
       });
 
-      // 自动同步绑定至当前活跃赛季
-      const activeSeason = await this.prisma.season.findFirst({ where: { status: 'active' } });
-      if (activeSeason) {
+      // 自动同步绑定至所有当前活跃赛季
+      const activeSeasons = await this.prisma.season.findMany({ where: { status: 'active' } });
+      for (const season of activeSeasons) {
         await this.prisma.seasonTeamPlayer.upsert({
           where: {
             seasonId_playerId: {
-              seasonId: activeSeason.id,
+              seasonId: season.id,
               playerId: updatedPlayer.id
             }
           },
           create: {
-            seasonId: activeSeason.id,
+            seasonId: season.id,
             teamId: updatedPlayer.teamId,
             playerId: updatedPlayer.id
           },
@@ -94,18 +94,18 @@ export class PlayerService {
       include: { team: true },
     });
 
-    // 新增球员自动绑定至当前活跃赛季
-    const activeSeason = await this.prisma.season.findFirst({ where: { status: 'active' } });
-    if (activeSeason) {
+    // 新增球员自动绑定至所有当前活跃赛季
+    const activeSeasons = await this.prisma.season.findMany({ where: { status: 'active' } });
+    for (const season of activeSeasons) {
       await this.prisma.seasonTeamPlayer.upsert({
         where: {
           seasonId_playerId: {
-            seasonId: activeSeason.id,
+            seasonId: season.id,
             playerId: newPlayer.id
           }
         },
         create: {
-          seasonId: activeSeason.id,
+          seasonId: season.id,
           teamId: newPlayer.teamId,
           playerId: newPlayer.id
         },
@@ -187,17 +187,17 @@ export class PlayerService {
 
     // 如果队籍发生迁移，同步更新当前活跃赛季名册信息
     if (updatePlayerDto.teamId) {
-      const activeSeason = await this.prisma.season.findFirst({ where: { status: 'active' } });
-      if (activeSeason) {
+      const activeSeasons = await this.prisma.season.findMany({ where: { status: 'active' } });
+      for (const season of activeSeasons) {
         await this.prisma.seasonTeamPlayer.upsert({
           where: {
             seasonId_playerId: {
-              seasonId: activeSeason.id,
+              seasonId: season.id,
               playerId: id
             }
           },
           create: {
-            seasonId: activeSeason.id,
+            seasonId: season.id,
             teamId: updatePlayerDto.teamId,
             playerId: id
           },
