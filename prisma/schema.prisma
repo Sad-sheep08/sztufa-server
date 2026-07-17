@@ -20,6 +20,7 @@ model Team {
   teamLogo        String?
   homeJersey      String?
   awayJersey      String?
+  gender          String    @default("MALE") // MALE: 男子, FEMALE: 女子
   players         Player[]
   homeMatches     Match[]   @relation("HomeTeam")
   awayMatches     Match[]   @relation("AwayTeam")

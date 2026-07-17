@@ -41,8 +41,10 @@ export class TeamController {
   findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('seasonId') seasonId?: string,
+    @Query('gender') gender?: string,
   ) {
-    return this.teamService.findAll(page, limit);
+    return this.teamService.findAll(page, limit, seasonId, gender);
   }
 
   @Get('search')

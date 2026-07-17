@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, MaxLength } from 'class-validator';
+import { IsString, IsOptional, MaxLength, IsIn } from 'class-validator';
 
 export class CreateTeamDto {
   @ApiProperty({ description: '球队名称', example: '人工智能学院' })
@@ -54,4 +54,10 @@ export class CreateTeamDto {
   @IsOptional()
   @IsString()
   awayJersey?: string;
+
+  @ApiProperty({ description: '球队性别组别 (MALE/FEMALE)', example: 'MALE', required: false })
+  @IsOptional()
+  @IsString()
+  @IsIn(['MALE', 'FEMALE'], { message: '球队性别组别必须是 MALE(男子) 或 FEMALE(女子)' })
+  gender?: string;
 }
