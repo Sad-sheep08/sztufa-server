@@ -56,35 +56,38 @@ export class MatchService {
       // 写入阵容配置
       if (lineups && lineups.length > 0) {
         const uniqueLineups = Array.from(
-          new Map(lineups.map(item => [item.playerId, item])).values()
+          new Map(lineups.map((item) => [item.playerId, item])).values(),
         );
 
-        const playerIds = uniqueLineups.map(l => l.playerId);
+        const playerIds = uniqueLineups.map((l) => l.playerId);
         const players = await tx.player.findMany({
-          where: { id: { in: playerIds } }
+          where: { id: { in: playerIds } },
         });
-        const playersMap = new Map(players.map(p => [p.id, p]));
+        const playersMap = new Map(players.map((p) => [p.id, p]));
 
         for (const item of uniqueLineups) {
           const p = playersMap.get(item.playerId);
           if (!p) continue;
 
-          const expectedTeamId = item.teamType === 'home' ? createdMatch.homeTeamId : createdMatch.awayTeamId;
+          const expectedTeamId =
+            item.teamType === 'home' ? createdMatch.homeTeamId : createdMatch.awayTeamId;
           if (p.teamId !== expectedTeamId) {
-            throw new BadRequestException(`球员 ${p.name} 队籍不属于所声明的 ${item.teamType === 'home' ? '主队' : '客队'}`);
+            throw new BadRequestException(
+              `球员 ${p.name} 队籍不属于所声明的 ${item.teamType === 'home' ? '主队' : '客队'}`,
+            );
           }
 
           validatedLineups.push({
             matchId: createdMatch.id,
             playerId: item.playerId,
             teamType: item.teamType,
-            lineupType: item.lineupType
+            lineupType: item.lineupType,
           });
         }
 
         if (validatedLineups.length > 0) {
           await tx.matchLineup.createMany({
-            data: validatedLineups
+            data: validatedLineups,
           });
         }
       }
@@ -113,7 +116,8 @@ export class MatchService {
       // 自动同步进球记录到 Goal 表以向下兼容展示端
       const goalEvents = events
         ? events.filter(
-            (e) => e.eventType === 'goal' || e.eventType === 'penalty' || e.eventType === 'own_goal',
+            (e) =>
+              e.eventType === 'goal' || e.eventType === 'penalty' || e.eventType === 'own_goal',
           )
         : [];
       if (goalEvents.length > 0) {
@@ -168,7 +172,13 @@ export class MatchService {
 
     const result = await this.prisma.match.findUnique({
       where: { id: match.id },
-      include: { homeTeam: true, awayTeam: true, goals: true, events: true, lineups: { include: { player: true } } },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        goals: true,
+        events: true,
+        lineups: { include: { player: true } },
+      },
     });
 
     if (result && result.seasonId && result.status === 'finished') {
@@ -186,7 +196,7 @@ export class MatchService {
     status?: string,
     stage?: string,
     groupName?: string,
-    knockoutRound?: string
+    knockoutRound?: string,
   ) {
     const pageNum = Math.max(1, Number(page) || 1);
     const limitNum = Math.max(1, Math.min(100, Number(limit) || 10));
@@ -230,21 +240,27 @@ export class MatchService {
         skip,
         take: limitNum,
         where,
-        include: { homeTeam: true, awayTeam: true, goals: true, events: true, lineups: { include: { player: true } } },
+        include: {
+          homeTeam: true,
+          awayTeam: true,
+          goals: true,
+          events: true,
+          lineups: { include: { player: true } },
+        },
         orderBy: { matchDate: 'desc' },
       }),
       this.prisma.match.count({ where }),
       this.prisma.match.findMany({
         where: whereStats,
-        select: { status: true }
+        select: { status: true },
       }),
     ]);
 
     const stats = {
       total: allMatchesForStats.length,
-      completed: allMatchesForStats.filter(m => m.status === 'finished').length,
-      scheduled: allMatchesForStats.filter(m => m.status === 'scheduled').length,
-      ongoing: allMatchesForStats.filter(m => m.status === 'ongoing').length,
+      completed: allMatchesForStats.filter((m) => m.status === 'finished').length,
+      scheduled: allMatchesForStats.filter((m) => m.status === 'scheduled').length,
+      ongoing: allMatchesForStats.filter((m) => m.status === 'ongoing').length,
     };
 
     return { data, total, page: pageNum, limit: limitNum, stats };
@@ -253,7 +269,13 @@ export class MatchService {
   async findOne(id: string) {
     const match = await this.prisma.match.findUnique({
       where: { id },
-      include: { homeTeam: true, awayTeam: true, goals: true, events: true, lineups: { include: { player: true } } },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        goals: true,
+        events: true,
+        lineups: { include: { player: true } },
+      },
     });
     if (!match || match.deletedAt !== null) {
       throw new NotFoundException('比赛不存在');
@@ -308,99 +330,106 @@ export class MatchService {
 
         if (lineups.length > 0) {
           const uniqueLineups = Array.from(
-            new Map(lineups.map(item => [item.playerId, item])).values()
+            new Map(lineups.map((item) => [item.playerId, item])).values(),
           );
 
-          const playerIds = uniqueLineups.map(l => l.playerId);
+          const playerIds = uniqueLineups.map((l) => l.playerId);
           const players = await tx.player.findMany({
-            where: { id: { in: playerIds } }
+            where: { id: { in: playerIds } },
           });
-          const playersMap = new Map(players.map(p => [p.id, p]));
+          const playersMap = new Map(players.map((p) => [p.id, p]));
 
           const validLineups = [];
           for (const item of uniqueLineups) {
             const p = playersMap.get(item.playerId);
             if (!p) continue;
 
-            const expectedTeamId = item.teamType === 'home' ? match.homeTeamId : match.awayTeamId;
+            const expectedTeamId = item.teamType === 'home' ? finalHomeTeamId : finalAwayTeamId;
             if (p.teamId !== expectedTeamId) {
-              throw new BadRequestException(`球员 ${p.name} 队籍不属于所声明的 ${item.teamType === 'home' ? '主队' : '客队'}`);
+              throw new BadRequestException(
+                `球员 ${p.name} 队籍不属于所声明的 ${item.teamType === 'home' ? '主队' : '客队'}`,
+              );
             }
 
             validLineups.push({
               matchId: id,
               playerId: item.playerId,
               teamType: item.teamType,
-              lineupType: item.lineupType
+              lineupType: item.lineupType,
             });
           }
 
           if (validLineups.length > 0) {
             await tx.matchLineup.createMany({
-              data: validLineups
+              data: validLineups,
             });
           }
         }
       }
 
       // 同步比赛事件数据
-      await tx.matchEvent.deleteMany({ where: { matchId: id } });
-      if (events && events.length > 0) {
-        await tx.matchEvent.createMany({
-          data: events.map((e) => ({
-            matchId: id,
-            eventTime: e.eventTime,
-            eventType: e.eventType,
-            description: e.description,
-            teamType: e.teamType,
-            playerId: e.playerId || null,
-            playerName: e.playerName || null,
-            jerseyNumber: e.jerseyNumber || null,
-            subPlayerId: e.subPlayerId || null,
-            subPlayerName: e.subPlayerName || null,
-            subJerseyNumber: e.subJerseyNumber || null,
-            assistPlayerId: e.assistPlayerId || null,
-            assistPlayerName: e.assistPlayerName || null,
-            assistJerseyNumber: e.assistJerseyNumber || null,
-          })),
-        });
+      if (events !== undefined) {
+        await tx.matchEvent.deleteMany({ where: { matchId: id } });
+        if (events.length > 0) {
+          await tx.matchEvent.createMany({
+            data: events.map((e) => ({
+              matchId: id,
+              eventTime: e.eventTime,
+              eventType: e.eventType,
+              description: e.description,
+              teamType: e.teamType,
+              playerId: e.playerId || null,
+              playerName: e.playerName || null,
+              jerseyNumber: e.jerseyNumber || null,
+              subPlayerId: e.subPlayerId || null,
+              subPlayerName: e.subPlayerName || null,
+              subJerseyNumber: e.subJerseyNumber || null,
+              assistPlayerId: e.assistPlayerId || null,
+              assistPlayerName: e.assistPlayerName || null,
+              assistJerseyNumber: e.assistJerseyNumber || null,
+            })),
+          });
+        }
       }
 
       // 同步进球数据到 Goal 表（向下兼容展示端）
-      await tx.goal.deleteMany({ where: { matchId: id } });
-      const goalEvents = events
-        ? events.filter(
-            (e) => e.eventType === 'goal' || e.eventType === 'penalty' || e.eventType === 'own_goal',
-          )
-        : [];
-      if (goalEvents.length > 0) {
-        await tx.goal.createMany({
-          data: goalEvents.map((g) => ({
-            matchId: id,
-            playerName:
-              g.eventType === 'own_goal'
-                ? `${g.playerName} (乌龙)`
-                : g.eventType === 'penalty'
-                  ? `${g.playerName} (点球)`
-                  : g.playerName || '',
-            jerseyNumber: g.jerseyNumber || '',
-            goalTime: g.eventTime,
-            teamType:
-              g.eventType === 'own_goal' ? (g.teamType === 'home' ? 'away' : 'home') : g.teamType,
-            playerId: g.playerId || null,
-          })),
-        });
-      } else if (goals && goals.length > 0) {
-        await tx.goal.createMany({
-          data: goals.map((g) => ({
-            matchId: id,
-            playerName: g.playerName,
-            jerseyNumber: g.jerseyNumber,
-            goalTime: g.goalTime,
-            teamType: g.teamType,
-            playerId: g.playerId || null,
-          })),
-        });
+      if (events !== undefined || goals !== undefined) {
+        await tx.goal.deleteMany({ where: { matchId: id } });
+        const goalEvents = events
+          ? events.filter(
+              (e) =>
+                e.eventType === 'goal' || e.eventType === 'penalty' || e.eventType === 'own_goal',
+            )
+          : [];
+        if (goalEvents.length > 0) {
+          await tx.goal.createMany({
+            data: goalEvents.map((g) => ({
+              matchId: id,
+              playerName:
+                g.eventType === 'own_goal'
+                  ? `${g.playerName} (乌龙)`
+                  : g.eventType === 'penalty'
+                    ? `${g.playerName} (点球)`
+                    : g.playerName || '',
+              jerseyNumber: g.jerseyNumber || '',
+              goalTime: g.eventTime,
+              teamType:
+                g.eventType === 'own_goal' ? (g.teamType === 'home' ? 'away' : 'home') : g.teamType,
+              playerId: g.playerId || null,
+            })),
+          });
+        } else if (goals && goals.length > 0) {
+          await tx.goal.createMany({
+            data: goals.map((g) => ({
+              matchId: id,
+              playerName: g.playerName,
+              jerseyNumber: g.jerseyNumber,
+              goalTime: g.goalTime,
+              teamType: g.teamType,
+              playerId: g.playerId || null,
+            })),
+          });
+        }
       }
 
       return tx.match.findUnique({ where: { id } });
@@ -411,14 +440,33 @@ export class MatchService {
     }
 
     // 重新计算并同步所有受影响球员和需解禁停赛球员的状态
+    const effectiveEvents = events ?? match.events;
     await this.playerCardSyncService.syncMatchPlayers(
       id,
       updatedMatch.homeTeamId,
       updatedMatch.awayTeamId,
       updatedMatch.status,
-      events || [],
+      effectiveEvents,
       this.prisma,
     );
+
+    if (events !== undefined) {
+      const currentPlayerIds = new Set(
+        effectiveEvents.flatMap((event) =>
+          [event.playerId, event.subPlayerId, event.assistPlayerId].filter(Boolean),
+        ),
+      );
+      const previousPlayerIds = new Set(
+        match.events.flatMap((event) =>
+          [event.playerId, event.subPlayerId, event.assistPlayerId].filter(Boolean),
+        ),
+      );
+      for (const playerId of previousPlayerIds) {
+        if (!currentPlayerIds.has(playerId)) {
+          await this.playerCardSyncService.syncPlayerCards(playerId, this.prisma);
+        }
+      }
+    }
 
     // 记录审计日志
     const diffs: string[] = [];
@@ -431,7 +479,10 @@ export class MatchService {
     if (updateMatchDto.location !== undefined && updateMatchDto.location !== match.location) {
       diffs.push(`地点: ${match.location || '未定'}->${updateMatchDto.location || '未定'}`);
     }
-    if (updateMatchDto.matchDate !== undefined && new Date(updateMatchDto.matchDate).getTime() !== new Date(match.matchDate).getTime()) {
+    if (
+      updateMatchDto.matchDate !== undefined &&
+      new Date(updateMatchDto.matchDate).getTime() !== new Date(match.matchDate).getTime()
+    ) {
       diffs.push(`更新时间`);
     }
     if (updateMatchDto.status !== undefined && updateMatchDto.status !== match.status) {
@@ -446,19 +497,22 @@ export class MatchService {
 
     const homeTeamName = match.homeTeam?.teamName || '';
     const awayTeamName = match.awayTeam?.teamName || '';
-    const details = diffs.length > 0
-      ? `修改比赛 "${homeTeamName} vs ${awayTeamName}" 比分/信息: ${diffs.join(', ')}`
-      : `保存比赛 "${homeTeamName} vs ${awayTeamName}" 信息(未改动)`;
+    const details =
+      diffs.length > 0
+        ? `修改比赛 "${homeTeamName} vs ${awayTeamName}" 比分/信息: ${diffs.join(', ')}`
+        : `保存比赛 "${homeTeamName} vs ${awayTeamName}" 信息(未改动)`;
 
-    await this.auditLogService.log(
-      username,
-      'UPDATE_MATCH',
-      details,
-    );
+    await this.auditLogService.log(username, 'UPDATE_MATCH', details);
 
     const result = await this.prisma.match.findUnique({
       where: { id },
-      include: { homeTeam: true, awayTeam: true, goals: true, events: true, lineups: { include: { player: true } } },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+        goals: true,
+        events: true,
+        lineups: { include: { player: true } },
+      },
     });
 
     if (result && result.seasonId) {
@@ -515,5 +569,4 @@ export class MatchService {
 
     return deletedMatch;
   }
-
 }
