@@ -44,7 +44,6 @@ describe('MatchService.update', () => {
         deleteMany: jest.fn(),
         createMany: jest.fn(),
       },
-      computeAndCacheSeasonStats: jest.fn(),
     };
     prisma.$transaction = jest.fn((callback: (tx: typeof prisma) => unknown) => callback(prisma));
 
@@ -53,27 +52,44 @@ describe('MatchService.update', () => {
       syncMatchPlayers: jest.fn(),
       syncPlayerCards: jest.fn(),
     };
+    const seasonStatistics: any = { computeAndCache: jest.fn() };
+    const matchQuery: any = { findDetails: jest.fn() };
+    const matchDataWriter: any = {
+      replaceLineups: jest.fn(),
+      replaceEvents: jest.fn(),
+      replaceGoals: jest.fn(),
+    };
 
     return {
-      service: new MatchService(prisma, auditLogService, playerCardSyncService),
+      service: new MatchService(
+        prisma,
+        auditLogService,
+        playerCardSyncService,
+        seasonStatistics,
+        matchQuery,
+        matchDataWriter,
+      ),
       prisma,
       playerCardSyncService,
+      seasonStatistics,
+      matchQuery,
+      matchDataWriter,
     };
   };
 
   it('preserves events and goals when a partial update omits them', async () => {
-    const { service, prisma, playerCardSyncService } = createService();
+    const { service, prisma, playerCardSyncService, matchQuery, matchDataWriter } = createService();
     const updatedMatch = { ...originalMatch, location: 'new-field' };
     prisma.match.findUnique
       .mockResolvedValueOnce(originalMatch)
-      .mockResolvedValueOnce(updatedMatch)
       .mockResolvedValueOnce(updatedMatch);
     prisma.match.update.mockResolvedValue(updatedMatch);
+    matchQuery.findDetails.mockResolvedValue(updatedMatch);
 
     await service.update('match-1', { location: 'new-field' }, 'admin');
 
-    expect(prisma.matchEvent.deleteMany).not.toHaveBeenCalled();
-    expect(prisma.goal.deleteMany).not.toHaveBeenCalled();
+    expect(matchDataWriter.replaceEvents).not.toHaveBeenCalled();
+    expect(matchDataWriter.replaceGoals).not.toHaveBeenCalled();
     expect(playerCardSyncService.syncMatchPlayers).toHaveBeenCalledWith(
       'match-1',
       'home-old',
@@ -85,7 +101,7 @@ describe('MatchService.update', () => {
   });
 
   it('validates replacement lineups against the new teams', async () => {
-    const { service, prisma } = createService();
+    const { service, prisma, matchQuery, matchDataWriter } = createService();
     const updatedMatch = {
       ...originalMatch,
       homeTeamId: 'home-new',
@@ -93,9 +109,9 @@ describe('MatchService.update', () => {
     };
     prisma.match.findUnique
       .mockResolvedValueOnce(originalMatch)
-      .mockResolvedValueOnce(updatedMatch)
       .mockResolvedValueOnce(updatedMatch);
     prisma.match.update.mockResolvedValue(updatedMatch);
+    matchQuery.findDetails.mockResolvedValue(updatedMatch);
     prisma.team.findUnique
       .mockResolvedValueOnce({ id: 'home-new' })
       .mockResolvedValueOnce({ id: 'away-new' });
@@ -117,11 +133,15 @@ describe('MatchService.update', () => {
       'admin',
     );
 
-    expect(prisma.matchLineup.createMany).toHaveBeenCalledWith({
-      data: expect.arrayContaining([
+    expect(matchDataWriter.replaceLineups).toHaveBeenCalledWith(
+      prisma,
+      'match-1',
+      'home-new',
+      'away-new',
+      expect.arrayContaining([
         expect.objectContaining({ playerId: 'home-player', teamType: 'home' }),
         expect.objectContaining({ playerId: 'away-player', teamType: 'away' }),
       ]),
-    });
+    );
   });
 });

@@ -1,12 +1,14 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { SeasonStatisticsService } from '../prisma/season-statistics.service';
 
 @Injectable()
 export class SeasonService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLogService: AuditLogService,
+    private readonly seasonStatistics: SeasonStatisticsService,
   ) {}
 
   async getSeasons() {
@@ -147,7 +149,7 @@ export class SeasonService {
     });
 
     // 3. 重算本赛季的积分榜以刷新缓存
-    await this.prisma.computeAndCacheSeasonStats(seasonId);
+    await this.seasonStatistics.computeAndCache(seasonId);
 
     // 记录审计日志
     await this.auditLogService.log(

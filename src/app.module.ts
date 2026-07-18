@@ -10,10 +10,12 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { BackupModule } from './backup/backup.module';
 import { SeasonModule } from './season/season.module';
 import { NewsModule } from './news/news.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    PrismaModule,
     AuthModule,
     TeamModule,
     PlayerModule,

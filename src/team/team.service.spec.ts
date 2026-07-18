@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { describe, expect, it, jest } from '@jest/globals';
 import { TeamService } from './team.service';
+import { TeamRosterService } from './team-roster.service';
 
 describe('TeamService.createWithPlayers', () => {
   const createService = () => {
@@ -23,9 +24,15 @@ describe('TeamService.createWithPlayers', () => {
       $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
     };
     const auditLogService: any = { log: jest.fn() };
+    const seasonStatistics: any = { computeAndCache: jest.fn() };
 
     return {
-      service: new TeamService(prisma, auditLogService),
+      service: new TeamService(
+        prisma,
+        auditLogService,
+        new TeamRosterService(prisma),
+        seasonStatistics,
+      ),
       prisma,
       tx,
       auditLogService,

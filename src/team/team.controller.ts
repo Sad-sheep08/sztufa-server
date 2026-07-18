@@ -21,11 +21,17 @@ import { UpdateTeamDto } from './dto/update-team.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { TeamQueryService } from './team-query.service';
+import { TeamRosterService } from './team-roster.service';
 
 @Controller('api/v1/teams')
 @ApiTags('球队')
 export class TeamController {
-  constructor(private readonly teamService: TeamService) {}
+  constructor(
+    private readonly teamService: TeamService,
+    private readonly teamQueryService: TeamQueryService,
+    private readonly teamRosterService: TeamRosterService,
+  ) {}
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -55,19 +61,19 @@ export class TeamController {
     @Query('seasonId') seasonId?: string,
     @Query('gender') gender?: string,
   ) {
-    return this.teamService.findAll(page, limit, seasonId, gender);
+    return this.teamQueryService.findAll(page, limit, seasonId, gender);
   }
 
   @Get('search')
   @ApiOperation({ summary: '按名称搜索球队' })
   search(@Query('name') name: string) {
-    return this.teamService.searchByName(name);
+    return this.teamQueryService.searchByName(name);
   }
 
   @Get(':id')
   @ApiOperation({ summary: '获取单个球队' })
   findOne(@Param('id') id: string) {
-    return this.teamService.findOne(id);
+    return this.teamQueryService.findOne(id);
   }
 
   @Get(':id/players')
@@ -76,7 +82,7 @@ export class TeamController {
     @Param('id') id: string,
     @Query('seasonId') seasonId?: string,
   ) {
-    return this.teamService.getTeamRoster(id, seasonId);
+    return this.teamRosterService.getTeamRoster(id, seasonId);
   }
 
   @ApiBearerAuth()
