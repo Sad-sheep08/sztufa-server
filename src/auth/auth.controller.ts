@@ -30,6 +30,14 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  @ApiOperation({ summary: '获取当前登录用户信息' })
+  async getCurrentUser(@Req() req: any) {
+    return req.user;
+  }
+
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   @Get('users')
@@ -49,7 +57,8 @@ export class AuthController {
     @Req() req: any,
   ) {
     const operatorUsername = req.user?.username || 'admin';
-    return this.authService.updateUserRole(id, updateUserRoleDto.role, updateUserRoleDto.teamId, operatorUsername);
+    const operatorId = req.user?.id;
+    return this.authService.updateUserRole(id, updateUserRoleDto.role, updateUserRoleDto.teamId, operatorUsername, operatorId);
   }
 
   @ApiBearerAuth()
@@ -59,7 +68,8 @@ export class AuthController {
   @ApiOperation({ summary: '删除用户账号（仅超级管理员）' })
   async deleteUser(@Param('id') id: string, @Req() req: any) {
     const operatorUsername = req.user?.username || 'admin';
-    return this.authService.deleteUser(id, operatorUsername);
+    const operatorId = req.user?.id;
+    return this.authService.deleteUser(id, operatorUsername, operatorId);
   }
 
   @ApiBearerAuth()
