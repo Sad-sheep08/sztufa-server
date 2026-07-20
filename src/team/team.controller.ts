@@ -18,6 +18,7 @@ import { TeamService } from './team.service';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { CreateTeamWithPlayersDto } from './dto/create-team-with-players.dto';
 import { UpdateTeamDto } from './dto/update-team.dto';
+import { UpdateTeamWithPlayersDto } from './dto/update-team-with-players.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -35,7 +36,7 @@ export class TeamController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('super_admin')
+  @Roles('super_admin', 'coach')
   @Post('with-players')
   @ApiOperation({ summary: '在单个事务中创建球队及全部球员' })
   createWithPlayers(@Body() dto: CreateTeamWithPlayersDto, @Req() req: any) {
@@ -83,6 +84,20 @@ export class TeamController {
     @Query('seasonId') seasonId?: string,
   ) {
     return this.teamRosterService.getTeamRoster(id, seasonId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Patch(':id/with-players')
+  @ApiOperation({ summary: '在单个事务中更新球队信息及球员名单' })
+  updateWithPlayers(
+    @Param('id') id: string,
+    @Body() dto: UpdateTeamWithPlayersDto,
+    @Req() req: any,
+  ) {
+    const username = req.user?.username || 'admin';
+    return this.teamService.updateWithPlayers(id, dto, username, req.user);
   }
 
   @ApiBearerAuth()

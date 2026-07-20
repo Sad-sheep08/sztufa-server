@@ -6,11 +6,10 @@ describe('StartupMigrationService', () => {
     const rosterCount: any = jest.fn();
     const newsCount: any = jest.fn();
     const findSeasons: any = jest.fn();
-    const computeAndCache: any = jest.fn();
+    const computeAndCache: any = jest.fn(async () => ({ success: true }));
     rosterCount.mockResolvedValue(1);
     newsCount.mockResolvedValue(1);
     findSeasons.mockResolvedValue([{ id: 'season-1' }, { id: 'season-2' }]);
-    computeAndCache.mockResolvedValue(undefined);
     const prisma: any = {
       seasonTeamPlayer: { count: rosterCount },
       news: { count: newsCount },

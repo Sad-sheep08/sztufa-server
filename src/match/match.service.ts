@@ -92,7 +92,10 @@ export class MatchService {
     const result = await this.matchQuery.findDetails(match.id);
 
     if (result && result.seasonId && result.status === 'finished') {
-      await this.seasonStatistics.computeAndCache(result.seasonId);
+      const cacheResult = await this.seasonStatistics.computeAndCache(result.seasonId);
+      if (!cacheResult.success) {
+        console.error(`[Match Create] 积分榜缓存更新失败: ${cacheResult.error}`);
+      }
     }
 
     return result;
@@ -258,7 +261,10 @@ export class MatchService {
     const result = await this.matchQuery.findDetails(id);
 
     if (result && result.seasonId) {
-      await this.seasonStatistics.computeAndCache(result.seasonId);
+      const cacheResult = await this.seasonStatistics.computeAndCache(result.seasonId);
+      if (!cacheResult.success) {
+        console.error(`[Match Update] 积分榜缓存更新失败: ${cacheResult.error}`);
+      }
     }
 
     return result;
@@ -300,7 +306,10 @@ export class MatchService {
     }
 
     if (deletedMatch.seasonId) {
-      await this.seasonStatistics.computeAndCache(deletedMatch.seasonId);
+      const cacheResult = await this.seasonStatistics.computeAndCache(deletedMatch.seasonId);
+      if (!cacheResult.success) {
+        console.error(`[Match Delete] 积分榜缓存更新失败: ${cacheResult.error}`);
+      }
     }
 
     await this.auditLogService.log(

@@ -93,8 +93,15 @@ export class StartupMigrationService implements OnModuleInit {
   private async precomputeSeasonCaches() {
     console.log('[Startup Migration] Pre-computing standings and stats caches for all seasons...');
     const seasons = await this.prisma.season.findMany();
+    const errors: string[] = [];
     for (const season of seasons) {
-      await this.seasonStatistics.computeAndCache(season.id);
+      const result = await this.seasonStatistics.computeAndCache(season.id);
+      if (!result.success) {
+        errors.push(`赛季 ${season.name}: ${result.error}`);
+      }
+    }
+    if (errors.length > 0) {
+      console.error('[Startup Migration] 部分赛季缓存预计算失败:', errors);
     }
     console.log('[Startup Migration] Standings and stats pre-computation completed!');
   }

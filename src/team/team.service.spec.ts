@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { describe, expect, it, jest } from '@jest/globals';
 import { TeamService } from './team.service';
 import { TeamRosterService } from './team-roster.service';
@@ -149,5 +149,66 @@ describe('TeamService.createWithPlayers', () => {
       BadRequestException,
     );
     expect(tx.team.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('TeamService.updateWithPlayers', () => {
+  const createService = () => {
+    const tx: any = {
+      team: { update: jest.fn(), findUnique: jest.fn() },
+      player: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn(), create: jest.fn() },
+      seasonTeamPlayer: { upsert: jest.fn(), deleteMany: jest.fn() },
+      auditLog: { create: jest.fn() },
+    };
+    const prisma: any = {
+      team: { findUnique: jest.fn(), findFirst: jest.fn() },
+      season: { findMany: jest.fn() },
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
+    };
+    const service = new TeamService(
+      prisma,
+      { log: jest.fn() } as any,
+      new TeamRosterService(prisma),
+      { computeAndCache: jest.fn() } as any,
+    );
+    return { service, prisma, tx };
+  };
+
+  it('updates an existing player by ID when the student ID changes', async () => {
+    const { service, prisma, tx } = createService();
+    prisma.team.findUnique.mockResolvedValue({ id: 'team-1', teamName: 'Team', deletedAt: null });
+    prisma.season.findMany.mockResolvedValue([]);
+    tx.team.update.mockResolvedValue({ id: 'team-1' });
+    tx.player.findUnique.mockResolvedValue({
+      id: 'player-1', teamId: 'team-1', studentId: 'old-id', photo: null,
+      yellowCards: 0, redCards: 0, deletedAt: null,
+    });
+    tx.player.findFirst.mockResolvedValue(null);
+    tx.player.update.mockResolvedValue({ id: 'player-1' });
+    tx.auditLog.create.mockResolvedValue({});
+    tx.team.findUnique.mockResolvedValue({ id: 'team-1', players: [{ id: 'player-1' }] });
+
+    await service.updateWithPlayers('team-1', {
+      players: [{ id: 'player-1', name: 'Player', studentId: 'new-id', jerseyNumber: '10' }],
+    }, 'coach', { role: 'coach', teamId: 'team-1' });
+
+    expect(tx.player.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'player-1' },
+      data: expect.objectContaining({ studentId: 'new-id' }),
+    }));
+    expect(tx.player.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a coach attempting to update another team', async () => {
+    const { service, prisma } = createService();
+    prisma.team.findUnique.mockResolvedValue({ id: 'team-2', teamName: 'Other', deletedAt: null });
+
+    await expect(service.updateWithPlayers(
+      'team-2',
+      { players: [] },
+      'coach',
+      { role: 'coach', teamId: 'team-1' },
+    )).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
