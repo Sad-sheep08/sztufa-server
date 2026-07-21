@@ -52,7 +52,9 @@ describe('MatchService.update', () => {
       syncMatchPlayers: jest.fn(),
       syncPlayerCards: jest.fn(),
     };
-    const seasonStatistics: any = { computeAndCache: jest.fn() };
+    const seasonStatistics: any = {
+      computeAndCache: jest.fn(async () => ({ success: true })),
+    };
     const matchQuery: any = { findDetails: jest.fn() };
     const matchDataWriter: any = {
       replaceLineups: jest.fn(),

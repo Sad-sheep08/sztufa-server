@@ -149,7 +149,11 @@ export class SeasonService {
     });
 
     // 3. 重算本赛季的积分榜以刷新缓存
-    await this.seasonStatistics.computeAndCache(seasonId);
+    const cacheResult = await this.seasonStatistics.computeAndCache(seasonId);
+    if (!cacheResult.success) {
+      console.error(`[Season Groups] 积分榜缓存更新失败: ${cacheResult.error}`);
+      // 缓存更新失败不影响分组操作的成功返回，但记录警告
+    }
 
     // 记录审计日志
     await this.auditLogService.log(

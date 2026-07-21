@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { UpdateTeamDto } from './dto/update-team.dto';
 import { CreateTeamWithPlayersDto } from './dto/create-team-with-players.dto';
+import { UpdateTeamWithPlayersDto } from './dto/update-team-with-players.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { TeamRosterService } from './team-roster.service';
 import { SeasonStatisticsService } from '../prisma/season-statistics.service';
@@ -139,6 +140,213 @@ export class TeamService {
     }, { timeout: 30000 });
   }
 
+  async updateWithPlayers(
+    teamId: string,
+    dto: UpdateTeamWithPlayersDto,
+    username: string = 'admin',
+    userCtx?: { role?: string; teamId?: string },
+  ) {
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team || team.deletedAt !== null) {
+      throw new NotFoundException('球队不存在');
+    }
+    if (userCtx?.role === 'coach' && userCtx.teamId !== teamId) {
+      throw new ForbiddenException('您没有权限修改其他球队的信息');
+    }
+
+    // 校验球队名称唯一性
+    if (dto.teamName && dto.teamName !== team.teamName) {
+      const existing = await this.prisma.team.findFirst({
+        where: { teamName: dto.teamName, deletedAt: null },
+      });
+      if (existing) {
+        throw new ConflictException('该球队名称已存在，请使用其他名称');
+      }
+    }
+
+    const { players = [], deletePlayerIds = [], ...teamData } = dto;
+
+    // 校验球员数据
+    const studentIds = new Set<string>();
+    const jerseyNumbers = new Set<string>();
+    for (const player of players) {
+      const sId = String(player.studentId ?? '').trim();
+      const jNum = String(player.jerseyNumber ?? '').trim();
+      if (!player.name?.trim() || !sId || jNum === '') {
+        throw new BadRequestException('球员姓名、学号和球衣号码不能为空');
+      }
+      if (studentIds.has(sId)) {
+        throw new ConflictException(`球员学号重复: ${sId}`);
+      }
+      if (jerseyNumbers.has(jNum)) {
+        throw new ConflictException(`球队内球衣号码重复: ${jNum}`);
+      }
+      studentIds.add(sId);
+      jerseyNumbers.add(jNum);
+    }
+
+    // 查找当前活跃赛季，用于名册同步
+    const activeSeasons = await this.prisma.season.findMany({ where: { status: 'active' } });
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. 更新球队基本信息
+      const updatedTeam = await tx.team.update({
+        where: { id: teamId },
+        data: teamData,
+      });
+
+      const auditDiffs: string[] = [];
+
+      // 2. 删除球员
+      if (deletePlayerIds.length > 0) {
+        const timestamp = Date.now();
+        for (const playerId of deletePlayerIds) {
+          const player = await tx.player.findUnique({ where: { id: playerId } });
+          if (player && player.teamId === teamId && player.deletedAt === null) {
+            await tx.player.update({
+              where: { id: playerId },
+              data: {
+                deletedAt: new Date(),
+                studentId: `${player.studentId}_deleted_${timestamp}`,
+              },
+            });
+            // 同步移除赛季名册
+            for (const season of activeSeasons) {
+              await tx.seasonTeamPlayer.deleteMany({
+                where: { seasonId: season.id, playerId },
+              });
+            }
+            auditDiffs.push(`删除球员: ${player.name}`);
+          }
+        }
+      }
+
+      // 3. 新增和更新球员
+      for (const playerDto of players) {
+        const normalizedDto = {
+          ...playerDto,
+          name: playerDto.name.trim(),
+          studentId: playerDto.studentId.trim(),
+          jerseyNumber: playerDto.jerseyNumber.trim(),
+        };
+
+        const existingById = normalizedDto.id
+          ? await tx.player.findUnique({ where: { id: normalizedDto.id } })
+          : null;
+        if (normalizedDto.id && (!existingById || existingById.teamId !== teamId)) {
+          throw new BadRequestException(`球员 ${normalizedDto.name} 不属于当前球队`);
+        }
+
+        const conflictingStudent = await tx.player.findFirst({
+          where: {
+            id: existingById ? { not: existingById.id } : undefined,
+            deletedAt: null,
+            studentId: normalizedDto.studentId,
+          },
+        });
+        if (conflictingStudent) {
+          throw new ConflictException(`学号 ${normalizedDto.studentId} 已被其他在籍球员使用`);
+        }
+
+        const restorableByStudentId = existingById ? null : await tx.player.findFirst({
+          where: {
+            studentId: { startsWith: `${normalizedDto.studentId}_deleted_` },
+            deletedAt: { not: null },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        const existingPlayer = existingById || restorableByStudentId;
+
+        if (existingPlayer) {
+
+          // 恢复或更新已有球员
+          await tx.player.update({
+            where: { id: existingPlayer.id },
+            data: {
+              name: normalizedDto.name,
+              studentId: normalizedDto.studentId,
+              jerseyNumber: normalizedDto.jerseyNumber,
+              photo: normalizedDto.photo ?? existingPlayer.photo ?? null,
+              status: normalizedDto.status || 'active',
+              yellowCards: normalizedDto.yellowCards ?? existingPlayer.yellowCards,
+              redCards: normalizedDto.redCards ?? existingPlayer.redCards,
+              teamId: teamId,
+              deletedAt: null,
+            },
+          });
+
+          // 同步赛季名册
+          for (const season of activeSeasons) {
+            await tx.seasonTeamPlayer.upsert({
+              where: { seasonId_playerId: { seasonId: season.id, playerId: existingPlayer.id } },
+              create: { seasonId: season.id, teamId, playerId: existingPlayer.id },
+              update: { teamId },
+            });
+          }
+
+          auditDiffs.push(existingPlayer.deletedAt
+            ? `恢复球员: ${normalizedDto.name}`
+            : `更新球员: ${normalizedDto.name}`
+          );
+        } else {
+          // 创建新球员
+          const newPlayer = await tx.player.create({
+            data: {
+              name: normalizedDto.name,
+              studentId: normalizedDto.studentId,
+              jerseyNumber: normalizedDto.jerseyNumber,
+              photo: normalizedDto.photo || null,
+              status: normalizedDto.status || 'active',
+              yellowCards: normalizedDto.yellowCards ?? 0,
+              redCards: normalizedDto.redCards ?? 0,
+              teamId,
+            },
+          });
+
+          // 同步赛季名册
+          for (const season of activeSeasons) {
+            await tx.seasonTeamPlayer.upsert({
+              where: { seasonId_playerId: { seasonId: season.id, playerId: newPlayer.id } },
+              create: { seasonId: season.id, teamId, playerId: newPlayer.id },
+              update: { teamId },
+            });
+          }
+
+          auditDiffs.push(`新增球员: ${normalizedDto.name}`);
+        }
+      }
+
+      // 4. 写入审计日志
+      const teamFieldDiffs: string[] = [];
+      if (dto.teamName !== undefined && dto.teamName !== team.teamName) {
+        teamFieldDiffs.push(`队名: ${team.teamName}->${dto.teamName}`);
+      }
+      if (dto.teamLogo !== undefined && dto.teamLogo !== team.teamLogo) {
+        teamFieldDiffs.push(`更新队徽`);
+      }
+      if (dto.headCoach !== undefined && dto.headCoach !== team.headCoach) {
+        teamFieldDiffs.push(`主教练: ${team.headCoach || '无'}->${dto.headCoach || '无'}`);
+      }
+
+      const allDiffs = [...teamFieldDiffs, ...auditDiffs];
+      await tx.auditLog.create({
+        data: {
+          username,
+          action: 'UPDATE_TEAM_WITH_PLAYERS',
+          details: allDiffs.length > 0
+            ? `批量更新球队 "${team.teamName}": ${allDiffs.join(', ')}`
+            : `保存球队 "${team.teamName}" 信息(未改动)`,
+        },
+      });
+
+      // 5. 返回更新后的球队和球员
+      return tx.team.findUnique({
+        where: { id: teamId },
+        include: { players: { where: { deletedAt: null } } },
+      });
+    }, { timeout: 30000 });
+  }
+
   async update(id: string, updateTeamDto: UpdateTeamDto, username: string = 'admin') {
     const team = await this.prisma.team.findUnique({ where: { id } });
     if (!team || team.deletedAt !== null) {
@@ -161,13 +369,16 @@ export class TeamService {
     });
 
     // 重新计算并缓存该球队所涉及的所有赛季的数据，以更新前台积分榜、射手榜、助攻榜的队徽
-    try {
-      const seasons = await this.prisma.season.findMany();
-      for (const season of seasons) {
-        await this.seasonStatistics.computeAndCache(season.id);
+    const cacheErrors: string[] = [];
+    const seasons = await this.prisma.season.findMany();
+    for (const season of seasons) {
+      const result = await this.seasonStatistics.computeAndCache(season.id);
+      if (!result.success) {
+        cacheErrors.push(`赛季 ${season.name}: ${result.error}`);
       }
-    } catch (cacheErr) {
-      console.error('更新球队队徽后重建积分榜统计缓存失败:', cacheErr);
+    }
+    if (cacheErrors.length > 0) {
+      console.error('更新球队队徽后重建积分榜统计缓存部分失败:', cacheErrors);
     }
 
     const diffs: string[] = [];

@@ -1,5 +1,8 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { SeasonStatisticsService } from './season-statistics.service';
+import { LeagueStandingsCalculator } from './league-standings.calculator';
+import { CupStandingsCalculator } from './cup-standings.calculator';
+import { PlayerStatisticsCalculator } from './player-statistics.calculator';
 
 describe('SeasonStatisticsService', () => {
   const createPrisma = () => ({
@@ -13,6 +16,13 @@ describe('SeasonStatisticsService', () => {
     team: { findMany: jest.fn() },
     player: { findMany: jest.fn() },
   });
+
+  const createService = (prisma: any) => {
+    const leagueCalculator = new LeagueStandingsCalculator();
+    const cupCalculator = new CupStandingsCalculator(prisma);
+    const playerStatsCalculator = new PlayerStatisticsCalculator(prisma);
+    return new SeasonStatisticsService(prisma, leagueCalculator, cupCalculator, playerStatsCalculator);
+  };
 
   it('保持联赛积分榜和球员统计的计算规则', async () => {
     const prisma: any = createPrisma();
@@ -67,7 +77,7 @@ describe('SeasonStatisticsService', () => {
     ]);
     prisma.season.update.mockResolvedValue({});
 
-    await new SeasonStatisticsService(prisma).computeAndCache('season-1');
+    await createService(prisma).computeAndCache('season-1');
 
     expect(prisma.season.update).toHaveBeenCalledWith({
       where: { id: 'season-1' },
@@ -113,7 +123,7 @@ describe('SeasonStatisticsService', () => {
     prisma.player.findMany.mockResolvedValue([]);
     prisma.season.update.mockResolvedValue({});
 
-    await new SeasonStatisticsService(prisma).computeAndCache('cup-1');
+    await createService(prisma).computeAndCache('cup-1');
 
     expect(prisma.season.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
@@ -134,8 +144,9 @@ describe('SeasonStatisticsService', () => {
     const prisma: any = createPrisma();
     prisma.season.findUnique.mockResolvedValue(null);
 
-    await new SeasonStatisticsService(prisma).computeAndCache('missing');
+    const result = await createService(prisma).computeAndCache('missing');
 
     expect(prisma.season.update).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: false, error: '赛季不存在' });
   });
 });
