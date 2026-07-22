@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { isTeamGenderCompatibleWithSeason } from '../common/season-gender';
 
 interface PlayerData {
   name: string;
@@ -24,6 +25,7 @@ interface TeamData {
   teamLogo: string;
   homeJersey: string;
   awayJersey: string;
+  gender?: 'MALE' | 'FEMALE';
   players: PlayerData[];
 }
 
@@ -70,6 +72,7 @@ export class ImportService {
               teamLogo: teamData.teamLogo,
               homeJersey: teamData.homeJersey,
               awayJersey: teamData.awayJersey,
+              gender: teamData.gender || existingTeam.gender,
             },
           });
           teamId = updatedTeam.id;
@@ -89,14 +92,20 @@ export class ImportService {
               teamLogo: teamData.teamLogo,
               homeJersey: teamData.homeJersey,
               awayJersey: teamData.awayJersey,
+              gender: teamData.gender || 'MALE',
             },
           });
           teamId = newTeam.id;
           result.success++;
         }
 
-        const activeSeason = await tx.season.findFirst({
+        const activeSeasons = await tx.season.findMany({
           where: { status: 'active' },
+        });
+
+        const team = await tx.team.findUniqueOrThrow({
+          where: { id: teamId },
+          select: { gender: true },
         });
 
         for (const player of teamData.players) {
@@ -134,7 +143,13 @@ export class ImportService {
             }
 
             // 同步绑定到当前活跃赛季的名册表
-            if (activeSeason) {
+            for (const activeSeason of activeSeasons) {
+              if (!isTeamGenderCompatibleWithSeason(activeSeason.name, team.gender)) {
+                await tx.seasonTeamPlayer.deleteMany({
+                  where: { seasonId: activeSeason.id, playerId: finalPlayerId },
+                });
+                continue;
+              }
               await tx.seasonTeamPlayer.upsert({
                 where: {
                   seasonId_playerId: {

@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { SeasonStatisticsService } from '../prisma/season-statistics.service';
+import { getSeasonGender } from '../common/season-gender';
 
 @Injectable()
 export class SeasonService {
@@ -61,8 +62,12 @@ export class SeasonService {
       });
 
       // 3. 将所有未删除的活跃球员一键自动登记注册进新赛季的名册表 SeasonTeamPlayer 中
+      const seasonGender = getSeasonGender(trimmedName);
       const activePlayers = await tx.player.findMany({
-        where: { deletedAt: null }
+        where: {
+          deletedAt: null,
+          ...(seasonGender ? { team: { gender: seasonGender } } : {}),
+        },
       });
 
       if (activePlayers.length > 0) {
@@ -331,8 +336,12 @@ export class SeasonService {
       });
 
       // 2. 将所有未删除的活跃球员登记注册进新赛季的名册表 SeasonTeamPlayer 中
+      const seasonGender = getSeasonGender(trimmedName);
       const activePlayers = await tx.player.findMany({
-        where: { deletedAt: null }
+        where: {
+          deletedAt: null,
+          ...(seasonGender ? { team: { gender: seasonGender } } : {}),
+        },
       });
 
       if (activePlayers.length > 0) {

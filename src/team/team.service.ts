@@ -7,6 +7,7 @@ import { UpdateTeamWithPlayersDto } from './dto/update-team-with-players.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { TeamRosterService } from './team-roster.service';
 import { SeasonStatisticsService } from '../prisma/season-statistics.service';
+import { isTeamGenderCompatibleWithSeason } from '../common/season-gender';
 
 @Injectable()
 export class TeamService {
@@ -195,6 +196,15 @@ export class TeamService {
         data: teamData,
       });
 
+      // Remove stale roster entries when a team's gender changes.
+      for (const season of activeSeasons) {
+        if (!isTeamGenderCompatibleWithSeason(season.name, updatedTeam.gender)) {
+          await tx.seasonTeamPlayer.deleteMany({
+            where: { seasonId: season.id, teamId },
+          });
+        }
+      }
+
       const auditDiffs: string[] = [];
 
       // 2. 删除球员
@@ -277,6 +287,9 @@ export class TeamService {
 
           // 同步赛季名册
           for (const season of activeSeasons) {
+            if (!isTeamGenderCompatibleWithSeason(season.name, updatedTeam.gender)) {
+              continue;
+            }
             await tx.seasonTeamPlayer.upsert({
               where: { seasonId_playerId: { seasonId: season.id, playerId: existingPlayer.id } },
               create: { seasonId: season.id, teamId, playerId: existingPlayer.id },
@@ -305,6 +318,9 @@ export class TeamService {
 
           // 同步赛季名册
           for (const season of activeSeasons) {
+            if (!isTeamGenderCompatibleWithSeason(season.name, updatedTeam.gender)) {
+              continue;
+            }
             await tx.seasonTeamPlayer.upsert({
               where: { seasonId_playerId: { seasonId: season.id, playerId: newPlayer.id } },
               create: { seasonId: season.id, teamId, playerId: newPlayer.id },

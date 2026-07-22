@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { getSeasonGender } from '../common/season-gender';
 
 @Injectable()
 export class TeamRosterService {
@@ -19,11 +20,7 @@ export class TeamRosterService {
       throw new BadRequestException('所选赛季不存在或已不是活跃赛季');
     }
 
-    const seasonGender = season.name.includes('女')
-      ? 'FEMALE'
-      : season.name.includes('男')
-        ? 'MALE'
-        : null;
+    const seasonGender = getSeasonGender(season.name);
     if (seasonGender && seasonGender !== teamGender) {
       throw new BadRequestException('球队组别与所选赛季不匹配');
     }

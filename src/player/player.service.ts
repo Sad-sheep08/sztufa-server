@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlayerDto } from './dto/create-player.dto';
 import { UpdatePlayerDto } from './dto/update-player.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { isTeamGenderCompatibleWithSeason } from '../common/season-gender';
 
 @Injectable()
 export class PlayerService {
@@ -15,8 +16,20 @@ export class PlayerService {
    * 将球员同步到所有活跃赛季的名册中
    */
   private async syncPlayerToActiveSeasons(playerId: string, teamId: string): Promise<void> {
-    const activeSeasons = await this.prisma.season.findMany({ where: { status: 'active' } });
+    const [activeSeasons, team] = await Promise.all([
+      this.prisma.season.findMany({ where: { status: 'active' } }),
+      this.prisma.team.findUnique({ where: { id: teamId }, select: { gender: true } }),
+    ]);
+    if (!team) {
+      return;
+    }
     for (const season of activeSeasons) {
+      if (!isTeamGenderCompatibleWithSeason(season.name, team.gender)) {
+        await this.prisma.seasonTeamPlayer.deleteMany({
+          where: { seasonId: season.id, playerId },
+        });
+        continue;
+      }
       await this.prisma.seasonTeamPlayer.upsert({
         where: {
           seasonId_playerId: {
